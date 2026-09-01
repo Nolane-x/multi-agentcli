@@ -1,4 +1,12 @@
-/** Spatial-agent canvas geometry. Kept pure so layout policy is deterministic and testable. */
+/** Spatial-agent canvas policy. Kept pure so layout and visibility stay deterministic and testable. */
+
+/** Minimal Session-list facts the spatial selector needs. */
+export interface SpatialSessionSummary {
+  readonly id: string
+  readonly parentId?: string
+  readonly origin?: 'subagent'
+  readonly running: boolean
+}
 
 /**
  * Grid dimension used by the mosaic. The shell deliberately starts at 2×2:
@@ -16,4 +24,70 @@ export function mosaicDimension(agentCount: number): number {
 /** Percentage of one tile edge before inter-tile gaps are subtracted in CSS. */
 export function mosaicCellPercent(agentCount: number): number {
   return 100 / mosaicDimension(agentCount)
+}
+
+/** Follow parent links to the highest locally-known ancestor, cycle-safe. */
+function rootOf(
+  start: string,
+  byId: Readonly<Record<string, SpatialSessionSummary | undefined>>,
+): string {
+  let cursor = start
+  const seen = new Set<string>()
+  while (!seen.has(cursor)) {
+    seen.add(cursor)
+    const parent = byId[cursor]?.parentId
+    if (parent === undefined || byId[parent] === undefined) return cursor
+    cursor = parent
+  }
+  // A corrupt cycle has no canonical top. The stable lexicographic minimum
+  // makes every member of the same cycle converge on the same family root.
+  return [...seen].sort()[0] ?? start
+}
+
+/** Whether one locally-known Session belongs under the selected root. */
+function descendsFrom(
+  candidate: string,
+  root: string,
+  byId: Readonly<Record<string, SpatialSessionSummary | undefined>>,
+): boolean {
+  let cursor: string | undefined = candidate
+  const seen = new Set<string>()
+  while (cursor !== undefined && !seen.has(cursor)) {
+    if (cursor === root) return true
+    seen.add(cursor)
+    cursor = byId[cursor]?.parentId
+  }
+  // In a cycle, compare the cycle's canonical root with the selected root.
+  return cursor === undefined ? false : rootOf(cursor, byId) === root
+}
+
+/**
+ * Select the Sessions represented by the spatial canvas.
+ *
+ * With a current Session, the canvas follows that Session's complete locally
+ * known agent family (top ancestor + descendants). Continuable children stay
+ * visible after they become idle/ready, so follow-up and inspection do not
+ * disappear at the exact moment work finishes. Unrelated historical Sessions
+ * remain in Harness' workspace browser.
+ *
+ * Without a current Session there is no family anchor, so only actively
+ * running Sessions surface as ambient work.
+ */
+export function canvasAgentIds(
+  orderedIds: readonly string[],
+  byId: Readonly<Record<string, SpatialSessionSummary | undefined>>,
+  current: string | undefined,
+): string[] {
+  const order = [...orderedIds]
+  const present = new Set(order)
+  for (const id of Object.keys(byId)) {
+    if (!present.has(id)) order.push(id)
+  }
+
+  if (current === undefined || byId[current] === undefined) {
+    return order.filter(id => byId[id]?.running === true)
+  }
+
+  const root = rootOf(current, byId)
+  return order.filter(id => byId[id] !== undefined && descendsFrom(id, root, byId))
 }
