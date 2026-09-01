@@ -97,16 +97,16 @@ function AgentChrome(props: {
   const identity = (
     <>
       <span className={css.statusDot} aria-hidden="true" />
-      <div className={css.agentTitleBlock}>
-        <div className={css.agentTitleLine}>
+      <span className={css.agentTitleBlock}>
+        <span className={css.agentTitleLine}>
           <strong>{props.title}</strong>
           {props.index === 0 && <span className={css.leadBadge}>LEAD</span>}
           {props.current && <span className={css.liveBadge}>LIVE</span>}
-        </div>
+        </span>
         <span className={css.agentMeta} title={props.cwd ?? String(props.id)}>
           {props.cwd ?? `session:${String(props.id).slice(0, 12)}`}
         </span>
-      </div>
+      </span>
     </>
   )
 
@@ -121,22 +121,13 @@ function AgentChrome(props: {
     >
       <header className={css.agentHeader}>
         {props.current || props.onOpen === undefined ? (
-          <div className={css.agentIdentity} style={{ flex: 1 }}>
+          <div className={css.agentIdentity}>
             {identity}
           </div>
         ) : (
           <button
             type="button"
-            className={css.agentIdentity}
-            style={{
-              flex: 1,
-              padding: 0,
-              border: 0,
-              background: 'transparent',
-              color: 'inherit',
-              textAlign: 'left',
-              cursor: 'pointer',
-            }}
+            className={`${css.agentIdentity} ${css.agentOpenButton}`}
             aria-label={`Open ${props.title}`}
             onClick={props.onOpen}
           >
