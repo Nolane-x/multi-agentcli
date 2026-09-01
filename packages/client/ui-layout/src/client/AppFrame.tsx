@@ -7,6 +7,8 @@
  * floating inspector, and active Sessions become simultaneously interactive
  * agent tiles. Production receives a renderer-native SessionScope capability
  * that pins each conversation occurrence to its own Harness Session binding.
+ * Active one-shot subagent jobs join the same mosaic as lifecycle-only cards;
+ * they never fabricate a Session transcript or renderer scope.
  */
 import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
@@ -17,7 +19,9 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-slots'
 import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
-import { canvasAgentIds, mosaicCellPercent, mosaicDimension } from './spatial.ts'
+import {
+  canvasAgentIds, canvasSubagentJobs, mosaicCellPercent, mosaicDimension,
+} from './spatial.ts'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 
@@ -166,6 +170,63 @@ function AgentChrome(props: {
 }
 
 /**
+ * One-shot subagents are real agent work owned by a parent Session, but they do
+ * not have their own continuable Harness transcript. Keep them visible as
+ * lifecycle cards without inventing renderer/session affordances.
+ */
+function SubagentJobTile(props: {
+  ownerId: SessionIdOf
+  ownerTitle: string
+  job: {
+    readonly id: string
+    readonly label: string
+    readonly status: 'running' | 'stopping' | 'completed' | 'killed' | 'failed'
+    readonly detail?: string
+  }
+  style?: CSSProperties
+}) {
+  const active = props.job.status === 'running' || props.job.status === 'stopping'
+  return (
+    <section
+      className={css.agentTile}
+      style={{ ...props.style, cursor: 'default' }}
+      data-agent-job-id={props.job.id}
+      data-agent-owner-id={props.ownerId}
+      data-agent-running={active || undefined}
+      aria-label={`${props.job.label}, one-shot subagent ${props.job.status}`}
+    >
+      <header className={css.agentHeader}>
+        <div className={css.agentIdentity}>
+          <span className={css.statusDot} aria-hidden="true" />
+          <span className={css.agentTitleBlock}>
+            <span className={css.agentTitleLine}>
+              <strong>{props.job.label}</strong>
+              <span className={css.leadBadge}>ONE-SHOT</span>
+            </span>
+            <span className={css.agentMeta} title={String(props.ownerId)}>
+              via {props.ownerTitle}
+            </span>
+          </span>
+        </div>
+        <div className={css.agentHeaderActions}>
+          <span className={css.agentState}>{props.job.status}</span>
+        </div>
+      </header>
+      <div className={css.agentBody}>
+        <div className={css.agentPreviewBody}>
+          <div className={css.previewTerminalLine}>
+            <span className={css.promptGlyph} aria-hidden="true">↳</span>
+            <span>delegated by {props.ownerTitle}</span>
+          </div>
+          <p>{props.job.detail ?? 'One-shot subagent execution is active.'}</p>
+          <span className={css.openHint}>job:{String(props.job.id).slice(0, 12)}</span>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/**
  * One drag handle: pointer capture, rAF-throttled dx reports against the drag-start origin.
  * `side` keys the hover-reveal CSS to the owning floating surface.
  */
@@ -230,6 +291,7 @@ export function AppFrame({
   const panels = useStore(s => s)
   const sessionIds = useSessions(s => s.ids)
   const sessionsById = useSessions(s => s.byId)
+  const jobsBySession = useSessions(s => s.jobsBySession)
   const currentSession = useSessions(s => s.current)
   const detailsSession = useSessions((s) => {
     const current = s.current
@@ -247,16 +309,21 @@ export function AppFrame({
     () => canvasAgentIds(sessionIds, sessionsById, currentSession),
     [currentSession, sessionIds, sessionsById],
   )
+  const activeSubagentJobs = useMemo(
+    () => canvasSubagentJobs(activeAgentIds, jobsBySession),
+    [activeAgentIds, jobsBySession],
+  )
   const [focusedAgent, setFocusedAgent] = useState<SessionIdOf | undefined>()
   const focusedVisible = focusedAgent !== undefined && activeAgentIds.includes(focusedAgent)
   const displayedAgentIds = focusedVisible ? [focusedAgent] : activeAgentIds
+  const displayedSubagentJobs = focusedVisible ? [] : activeSubagentJobs
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
   const stagedAgents = useRef(new Set<SessionIdOf>())
 
-  // Open each visible agent's resident event source once, without changing the
-  // global selection. Removal drops it from the local staging ledger so a
-  // later reappearance can be staged again.
+  // Open each visible Session agent's resident event source once, without
+  // changing global selection. One-shot job cards are deliberately excluded:
+  // they have lifecycle state, not a Session event window.
   useEffect(() => {
     const live = new Set(activeAgentIds)
     for (const staged of [...stagedAgents.current]) {
@@ -338,8 +405,9 @@ export function AppFrame({
   }, [actions])
 
   const productTitle = process.env.DSH_CLIENT_TITLE ?? t('brand.localBuild')
-  const dimension = focusedVisible ? 1 : mosaicDimension(displayedAgentIds.length)
-  const cellPercent = focusedVisible ? 100 : mosaicCellPercent(displayedAgentIds.length)
+  const visibleTileCount = displayedAgentIds.length + displayedSubagentJobs.length
+  const dimension = focusedVisible ? 1 : mosaicDimension(visibleTileCount)
+  const cellPercent = focusedVisible ? 100 : mosaicCellPercent(visibleTileCount)
   const gap = focusedVisible ? 0 : 12
   const gapShare = gap * (dimension - 1) / dimension
   const tileStyle: CSSProperties = {
@@ -410,6 +478,15 @@ export function AppFrame({
                 </AgentChrome>
               )
             })}
+            {displayedSubagentJobs.map(({ ownerId, job }) => (
+              <SubagentJobTile
+                key={`job:${String(job.id)}`}
+                ownerId={ownerId}
+                ownerTitle={sessionsById[ownerId]?.displayTitle ?? String(ownerId)}
+                job={job}
+                style={tileStyle}
+              />
+            ))}
           </div>
         )}
       </CenterColumn>
