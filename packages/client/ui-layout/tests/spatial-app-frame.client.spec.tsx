@@ -21,17 +21,19 @@ function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapsho
 
 function sessionState(count: number): SessionListState {
   const ids = Array.from({ length: count }, (_, index) => `agent-${index + 1}` as SessionId)
+  const root = ids[0]
   return {
     ids,
     byId: Object.fromEntries(ids.map((id, index) => [id, {
       id,
       displayTitle: `Agent ${index + 1}`,
       cwd: `/workspace/agent-${index + 1}`,
+      ...(index === 0 || root === undefined ? {} : { parentId: root, origin: 'subagent' as const }),
       running: true,
       blank: false,
       updatedAt: index + 1,
     }])),
-    current: ids[0],
+    current: root,
     phase: 'ready',
     subagentsByParent: {},
     jobsBySession: {},
@@ -87,7 +89,7 @@ afterEach(() => {
 })
 
 describe('AppFrame spatial agent canvas', () => {
-  it('renders five live sessions as a centered 3x3-sized mosaic with five real scoped conversation occurrences', () => {
+  it('renders a five-agent family as a centered 3x3-sized mosaic with five real scoped conversation occurrences', () => {
     const { container, stageAgent } = mountSpatialFrame(5)
     const tiles = container.querySelectorAll('[data-agent-id]')
     expect(tiles).toHaveLength(5)
