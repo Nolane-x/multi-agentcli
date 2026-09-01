@@ -5,10 +5,10 @@
  * bring its real Harness Session onto the interactive stage.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+import type { SessionIdOf } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { PanelActions } from './service.ts'
 import { AppFrame } from './AppFrame.tsx'
@@ -62,8 +62,12 @@ export interface ConvOwnerProps {}
 /** Details owner share: sessionId arrives as a framework-standard prop. */
 export interface DetailsOwnerProps {}
 
-/** Required services. `sessions` powers real agent-tile navigation. */
+/** Required services. `sessions` is provided transitively by ui-session. */
 export const inject = ['slots', 'theme', 'locale', 'sessions']
+
+type SessionNavigationContext = ClientContext & {
+  sessions: { open: (sessionId: SessionIdOf) => void }
+}
 
 /**
  * Client plugin body: provide ctx.layout and register the spatial AppFrame.
@@ -73,6 +77,7 @@ export function apply(ctx: ClientContext): void {
   const layout = new LayoutController()
   ctx.effect(() => {
     const disposeService = ctx.reflect.provide('layout', layout)
+    const sessionNavigation = (ctx as SessionNavigationContext).sessions
     const disposeRegistration = ctx.slots.register({
       name: 'root',
       locale: 'common',
@@ -88,8 +93,8 @@ export function apply(ctx: ClientContext): void {
         return {
           // Real navigation through the Session Controller. This is the same
           // authority used by upstream workspace/session UI, not DOM automation.
-          openAgent: (sessionId: Parameters<ClientContext['sessions']['open']>[0]) => {
-            ctx.sessions.open(sessionId)
+          openAgent: (sessionId: SessionIdOf) => {
+            sessionNavigation.open(sessionId)
           },
         }
       },
