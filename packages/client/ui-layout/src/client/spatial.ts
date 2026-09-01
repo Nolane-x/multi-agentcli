@@ -1,12 +1,14 @@
 /** Spatial-agent canvas policy. Kept pure so layout and visibility stay deterministic and testable. */
 
 /** Minimal Session-list facts the spatial selector needs. */
-export interface SpatialSessionSummary {
-  readonly id: string
-  readonly parentId?: string
+export interface SpatialSessionSummary<Id extends string = string> {
+  readonly id: Id
+  readonly parentId?: Id
   readonly origin?: 'subagent'
   readonly running: boolean
 }
+
+type SpatialSessionMap<Id extends string> = Readonly<Partial<Record<Id, SpatialSessionSummary<Id>>>>
 
 /**
  * Grid dimension used by the mosaic. The shell deliberately starts at 2×2:
@@ -27,31 +29,28 @@ export function mosaicCellPercent(agentCount: number): number {
 }
 
 /** Follow parent links to the highest locally-known ancestor, cycle-safe. */
-function rootOf(
-  start: string,
-  byId: Readonly<Record<string, SpatialSessionSummary | undefined>>,
-): string {
+function rootOf<Id extends string>(start: Id, byId: SpatialSessionMap<Id>): Id {
   let cursor = start
-  const seen = new Set<string>()
+  const seen = new Set<Id>()
   while (!seen.has(cursor)) {
     seen.add(cursor)
     const parent = byId[cursor]?.parentId
     if (parent === undefined || byId[parent] === undefined) return cursor
     cursor = parent
   }
-  // A corrupt cycle has no canonical top. The stable lexicographic minimum
-  // makes every member of the same cycle converge on the same family root.
+  // A corrupt cycle has no canonical top. The stable lexical minimum makes
+  // every member of the same cycle converge on the same family root.
   return [...seen].sort()[0] ?? start
 }
 
 /** Whether one locally-known Session belongs under the selected root. */
-function descendsFrom(
-  candidate: string,
-  root: string,
-  byId: Readonly<Record<string, SpatialSessionSummary | undefined>>,
+function descendsFrom<Id extends string>(
+  candidate: Id,
+  root: Id,
+  byId: SpatialSessionMap<Id>,
 ): boolean {
-  let cursor: string | undefined = candidate
-  const seen = new Set<string>()
+  let cursor: Id | undefined = candidate
+  const seen = new Set<Id>()
   while (cursor !== undefined && !seen.has(cursor)) {
     if (cursor === root) return true
     seen.add(cursor)
@@ -73,14 +72,14 @@ function descendsFrom(
  * Without a current Session there is no family anchor, so only actively
  * running Sessions surface as ambient work.
  */
-export function canvasAgentIds(
-  orderedIds: readonly string[],
-  byId: Readonly<Record<string, SpatialSessionSummary | undefined>>,
-  current: string | undefined,
-): string[] {
+export function canvasAgentIds<Id extends string>(
+  orderedIds: readonly Id[],
+  byId: SpatialSessionMap<Id>,
+  current: Id | undefined,
+): Id[] {
   const order = [...orderedIds]
   const present = new Set(order)
-  for (const id of Object.keys(byId)) {
+  for (const id of Object.keys(byId) as Id[]) {
     if (!present.has(id)) order.push(id)
   }
 
