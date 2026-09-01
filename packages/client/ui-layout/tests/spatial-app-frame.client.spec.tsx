@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, within } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
 import { AppFrame, type AppFrameProps } from '@deepseek-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
 import { createLayoutStore } from '@deepseek-ai/dsh-client-ui-layout/src/client/stores.ts'
@@ -118,6 +118,21 @@ describe('AppFrame spatial agent canvas', () => {
     fireEvent.click(header)
     expect(openAgent).toHaveBeenCalledTimes(1)
     expect(openAgent).toHaveBeenCalledWith('agent-2')
+  })
+
+  it('focuses a background agent without changing the current Harness session', () => {
+    const { container, openAgent } = mountSpatialFrame(5)
+    const second = container.querySelector('[data-agent-id="agent-2"]') as HTMLElement
+    const focus = within(second).getByRole('button', { name: 'Focus this agent' })
+
+    fireEvent.click(focus)
+    expect(openAgent).not.toHaveBeenCalled()
+    expect(container.querySelectorAll('[data-agent-id]')).toHaveLength(1)
+    expect(container.querySelector('[data-agent-focused="true"]')?.getAttribute('data-agent-id')).toBe('agent-2')
+
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
+    expect(container.querySelectorAll('[data-agent-id]')).toHaveLength(5)
+    expect(container.querySelector('[data-agent-current="true"]')?.getAttribute('data-agent-id')).toBe('agent-1')
   })
 
   it('focuses the current agent to the full canvas and restores the mosaic with Escape', () => {
