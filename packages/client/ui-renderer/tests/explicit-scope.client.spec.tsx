@@ -4,13 +4,13 @@ import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { ReactNode } from 'react'
 import type { StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
-import type {
-  ScopedStandardSourceBinding,
-  SlotRendererHost,
-  SlotScopeAdapter,
-  StandardSourceBinding,
+import {
+  SessionScopeProvider,
+  type ScopedStandardSourceBinding,
+  type SlotRendererHost,
+  type SlotScopeAdapter,
+  type StandardSourceBinding,
 } from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { ScopeProvider } from '../src/client/bindings.tsx'
 import { createSlotRenderer } from '../src/client/scoped-slots.tsx'
 
 function observable<T>(initial: T) {
@@ -44,8 +44,8 @@ function binding(ctx: Context, id: string): ScopedStandardSourceBinding {
   }
 }
 
-describe('explicit slot scope', () => {
-  it('renders two session-maybe occurrences against different session bindings at the same time', () => {
+describe('public explicit session scope', () => {
+  it('renders two session-maybe occurrences against different bindings at the same time', () => {
     const ctx = new Context()
     const s1 = binding(ctx, 's1')
     const s2 = binding(ctx, 's2')
@@ -78,12 +78,12 @@ describe('explicit slot scope', () => {
         renderSlot: (key: string, owner: object) => ReactNode
       }) => (
         <>
-          <ScopeProvider scope="session-maybe" scopeKey="s1">
+          <SessionScopeProvider scope="session-maybe" scopeKey="s1">
             {props.renderSlot('k.session', {})}
-          </ScopeProvider>
-          <ScopeProvider scope="session-maybe" scopeKey="s2">
+          </SessionScopeProvider>
+          <SessionScopeProvider scope="session-maybe" scopeKey="s2">
             {props.renderSlot('k.session', {})}
-          </ScopeProvider>
+          </SessionScopeProvider>
         </>
       ),
       options: {},
