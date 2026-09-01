@@ -10,6 +10,27 @@ export interface SpatialSessionSummary<Id extends string = string> {
 
 type SpatialSessionMap<Id extends string> = Readonly<Partial<Record<Id, SpatialSessionSummary<Id>>>>
 
+/** Minimal background-job facts required to truthfully surface one-shot delegations. */
+export interface SpatialJobSummary<JobId extends string = string> {
+  readonly id: JobId
+  readonly kind: string
+  readonly label: string
+  readonly status: 'running' | 'stopping' | 'completed' | 'killed' | 'failed'
+  readonly detail?: string
+  readonly startedAt: number
+  readonly finishedAt?: number
+}
+
+/** One active parent-owned one-shot subagent job projected onto the canvas. */
+export interface SpatialSubagentJob<OwnerId extends string = string, JobId extends string = string> {
+  readonly ownerId: OwnerId
+  readonly job: SpatialJobSummary<JobId>
+}
+
+type SpatialJobsByOwner<OwnerId extends string, JobId extends string> = Readonly<Partial<
+  Record<OwnerId, readonly SpatialJobSummary<JobId>[]>
+>>
+
 /**
  * Grid dimension used by the mosaic. The shell deliberately starts at 2×2:
  * one agent therefore occupies roughly one quarter of the canvas, 1–4 agents
@@ -89,4 +110,25 @@ export function canvasAgentIds<Id extends string>(
 
   const root = rootOf(current, byId)
   return order.filter(id => byId[id] !== undefined && descendsFrom(id, root, byId))
+}
+
+/**
+ * Select active one-shot subagent jobs owned by the Sessions represented on the
+ * canvas. These jobs are real child-agent executions but do not own a Harness
+ * Session transcript, so callers must present lifecycle/status only rather
+ * than fabricating a conversation surface.
+ */
+export function canvasSubagentJobs<OwnerId extends string, JobId extends string>(
+  orderedOwnerIds: readonly OwnerId[],
+  jobsByOwner: SpatialJobsByOwner<OwnerId, JobId>,
+): SpatialSubagentJob<OwnerId, JobId>[] {
+  const result: SpatialSubagentJob<OwnerId, JobId>[] = []
+  for (const ownerId of orderedOwnerIds) {
+    for (const job of jobsByOwner[ownerId] ?? []) {
+      if (job.kind !== 'subagent') continue
+      if (job.status !== 'running' && job.status !== 'stopping') continue
+      result.push({ ownerId, job })
+    }
+  }
+  return result
 }
