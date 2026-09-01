@@ -358,7 +358,7 @@ export function AppFrame({
                   style={tileStyle}
                   {...current
                     ? { onToggleFocus: () => { setFocusedAgent(value => value === id ? undefined : id) } }
-                    : { onOpen: openAgent === undefined ? undefined : () => { openAgent(id) } }}
+                    : openAgent === undefined ? {} : { onOpen: () => { openAgent(id) } }}
                 >
                   {current ? renderSlot('conversation', {}) : undefined}
                 </AgentChrome>
