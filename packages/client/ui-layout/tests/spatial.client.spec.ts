@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   canvasAgentIds,
+  canvasSubagentJobs,
   mosaicCellPercent,
   mosaicDimension,
 } from '@deepseek-ai/dsh-client-ui-layout/src/client/spatial.ts'
@@ -59,6 +60,29 @@ describe('spatial agent family selection', () => {
     }
     expect(canvasAgentIds(ids, cyclic, 'child-a')).toEqual([
       'root', 'child-a', 'child-b', 'grandchild',
+    ])
+  })
+})
+
+describe('one-shot subagent job projection', () => {
+  it('keeps active subagent jobs in owner order and filters unrelated or terminal jobs', () => {
+    const jobs = {
+      root: [
+        { id: 'r1', kind: 'subagent', label: 'Research', status: 'running' as const, startedAt: 1 },
+        { id: 'r2', kind: 'shell', label: 'pnpm test', status: 'running' as const, startedAt: 2 },
+        { id: 'r3', kind: 'subagent', label: 'Done', status: 'completed' as const, startedAt: 3, finishedAt: 4 },
+      ],
+      child: [
+        { id: 'c1', kind: 'subagent', label: 'Stopping', status: 'stopping' as const, detail: 'Wrapping up', startedAt: 5 },
+      ],
+      unrelated: [
+        { id: 'u1', kind: 'subagent', label: 'Other tree', status: 'running' as const, startedAt: 6 },
+      ],
+    }
+
+    expect(canvasSubagentJobs(['child', 'root'], jobs)).toEqual([
+      { ownerId: 'child', job: jobs.child[0] },
+      { ownerId: 'root', job: jobs.root[0] },
     ])
   })
 })
