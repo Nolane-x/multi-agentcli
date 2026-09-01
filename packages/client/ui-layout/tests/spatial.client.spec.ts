@@ -4,6 +4,7 @@ import {
   canvasSubagentJobs,
   mosaicCellPercent,
   mosaicDimension,
+  spatialAgentLineage,
 } from '@deepseek-ai/dsh-client-ui-layout/src/client/spatial.ts'
 
 describe('spatial agent mosaic geometry', () => {
@@ -61,6 +62,31 @@ describe('spatial agent family selection', () => {
     expect(canvasAgentIds(ids, cyclic, 'child-a')).toEqual([
       'root', 'child-a', 'child-b', 'grandchild',
     ])
+  })
+
+  it('derives leader, parent, and depth from the graph rather than tile order', () => {
+    expect(spatialAgentLineage('root', byId)).toEqual({ rootId: 'root', depth: 0 })
+    expect(spatialAgentLineage('child-b', byId)).toEqual({
+      rootId: 'root',
+      parentId: 'root',
+      depth: 1,
+    })
+    expect(spatialAgentLineage('grandchild', byId)).toEqual({
+      rootId: 'root',
+      parentId: 'child-b',
+      depth: 2,
+    })
+  })
+
+  it('uses one canonical root for malformed cycles and reports distance to it', () => {
+    const cyclic = {
+      a: { id: 'a', parentId: 'c', origin: 'subagent' as const, running: true },
+      b: { id: 'b', parentId: 'a', origin: 'subagent' as const, running: true },
+      c: { id: 'c', parentId: 'b', origin: 'subagent' as const, running: true },
+    }
+    expect(spatialAgentLineage('a', cyclic)).toEqual({ rootId: 'a', parentId: 'c', depth: 0 })
+    expect(spatialAgentLineage('b', cyclic)).toEqual({ rootId: 'a', parentId: 'a', depth: 1 })
+    expect(spatialAgentLineage('c', cyclic)).toEqual({ rootId: 'a', parentId: 'b', depth: 2 })
   })
 })
 
