@@ -30,22 +30,24 @@ const RootBindingContext = createContext<StandardSourceBinding | null>(null)
 const ScopeBindingContext = createContext<StandardSourceBinding | null>(null)
 
 /**
+ * Read the current scope binding. The nearest ScopeProvider wins, so a
+ * spatial/multi-pane owner may pin one subtree to an explicit Session while
+ * the rest of the renderer continues following the global current Session.
+ * @returns the active scope binding.
+ */
+export function useScopeBinding(): StandardSourceBinding {
+  const binding = useContext(ScopeBindingContext)
+  if (binding === null) throw new SlotAssemblyError('scoped slot rendered outside its scope provider')
+  return binding
+}
+
+/**
  * Read the root standard-source binding.
  * @returns the current root binding.
  */
 export function useRootBinding(): StandardSourceBinding {
   const binding = useContext(RootBindingContext)
   if (binding === null) throw new SlotAssemblyError('slot rendered outside the root standard-source provider')
-  return binding
-}
-
-/**
- * Read the current-session-optional binding.
- * @returns a binding whose key is absent when no Session is selected.
- */
-export function useScopeBinding(): StandardSourceBinding {
-  const binding = useContext(ScopeBindingContext)
-  if (binding === null) throw new SlotAssemblyError('scoped slot rendered outside its scope provider')
   return binding
 }
 
@@ -126,18 +128,34 @@ export function RootStandardProvider({ children }: { children: ReactNode }) {
   return <RootBindingContext.Provider value={binding}>{children}</RootBindingContext.Provider>
 }
 
-/** Subscribe to the scope roster before resolving and binding its current adapter. */
+/**
+ * Subscribe to the scope roster and bind either the current scope or one
+ * explicitly addressed live binding. Explicit binding is intentionally a
+ * provider concern rather than a global selection mutation: multiple sibling
+ * panes can therefore render different Sessions concurrently.
+ */
 export function ScopeProvider({
   scope,
+  scopeKey,
   children,
 }: {
   scope: 'session' | 'session-maybe'
+  /** Optional explicit scope identity. Omit to keep upstream current-session semantics. */
+  scopeKey?: string
   children: ReactNode
 }) {
   const host = useHost()
   observableHook(host.scopeRevision)(value => value)
   const adapter = host.scope(scope)
   if (adapter === undefined) throw new SlotAssemblyError(`scope '${scope}' rendered without an installed adapter`)
-  const binding = observableHook(adapter.current)(value => value)
+
+  // Always keep the same Hook shape. Explicit panes ignore the current value,
+  // but retaining this subscription avoids a conditional Hook path when a
+  // caller switches between implicit and explicit scope modes.
+  const currentBinding = observableHook(adapter.current)(value => value)
+  const binding = scopeKey === undefined ? currentBinding : adapter.resolve(scopeKey)
+  if (binding === undefined) {
+    throw new SlotAssemblyError(`scope '${scope}' could not resolve explicit key '${scopeKey}'`)
+  }
   return <ScopeBindingContext.Provider value={binding}>{children}</ScopeBindingContext.Provider>
 }
