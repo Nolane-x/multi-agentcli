@@ -10,7 +10,7 @@
  */
 import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
-  type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode,
+  type CSSProperties, type ReactNode,
 } from 'react'
 import type {
   PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore, SessionIdOf,
@@ -94,14 +94,21 @@ function AgentChrome(props: {
   children?: ReactNode
   style?: CSSProperties
 }) {
-  const activate = () => {
-    if (!props.current) props.onOpen?.()
-  }
-  const onKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
-    if (props.current || (event.key !== 'Enter' && event.key !== ' ')) return
-    event.preventDefault()
-    activate()
-  }
+  const identity = (
+    <>
+      <span className={css.statusDot} aria-hidden="true" />
+      <div className={css.agentTitleBlock}>
+        <div className={css.agentTitleLine}>
+          <strong>{props.title}</strong>
+          {props.index === 0 && <span className={css.leadBadge}>LEAD</span>}
+          {props.current && <span className={css.liveBadge}>LIVE</span>}
+        </div>
+        <span className={css.agentMeta} title={props.cwd ?? String(props.id)}>
+          {props.cwd ?? `session:${String(props.id).slice(0, 12)}`}
+        </span>
+      </div>
+    </>
+  )
 
   return (
     <section
@@ -112,29 +119,33 @@ function AgentChrome(props: {
       data-agent-running={props.running || undefined}
       data-agent-focused={props.focused || undefined}
     >
-      <header
-        className={css.agentHeader}
-        style={{ cursor: !props.current && props.onOpen !== undefined ? 'pointer' : undefined }}
-        {...props.current || props.onOpen === undefined
-          ? {}
-          : { role: 'button', tabIndex: 0, onClick: activate, onKeyDown }}
-      >
-        <div className={css.agentIdentity}>
-          <span className={css.statusDot} aria-hidden="true" />
-          <div className={css.agentTitleBlock}>
-            <div className={css.agentTitleLine}>
-              <strong>{props.title}</strong>
-              {props.index === 0 && <span className={css.leadBadge}>LEAD</span>}
-              {props.current && <span className={css.liveBadge}>LIVE</span>}
-            </div>
-            <span className={css.agentMeta} title={props.cwd ?? String(props.id)}>
-              {props.cwd ?? `session:${String(props.id).slice(0, 12)}`}
-            </span>
+      <header className={css.agentHeader}>
+        {props.current || props.onOpen === undefined ? (
+          <div className={css.agentIdentity} style={{ flex: 1 }}>
+            {identity}
           </div>
-        </div>
+        ) : (
+          <button
+            type="button"
+            className={css.agentIdentity}
+            style={{
+              flex: 1,
+              padding: 0,
+              border: 0,
+              background: 'transparent',
+              color: 'inherit',
+              textAlign: 'left',
+              cursor: 'pointer',
+            }}
+            aria-label={`Open ${props.title}`}
+            onClick={props.onOpen}
+          >
+            {identity}
+          </button>
+        )}
         <div className={css.agentHeaderActions}>
           <span className={css.agentState}>{props.running ? 'working' : 'ready'}</span>
-          {props.current && props.onToggleFocus !== undefined && (
+          {props.onToggleFocus !== undefined && (
             <button
               type="button"
               className={css.focusButton}
@@ -401,9 +412,8 @@ export function AppFrame({
                   current={current}
                   focused={focusedVisible && focusedAgent === id}
                   style={tileStyle}
-                  {...current
-                    ? { onToggleFocus: () => { setFocusedAgent(value => value === id ? undefined : id) } }
-                    : openAgent === undefined ? {} : { onOpen: () => { openAgent(id) } }}
+                  onToggleFocus={() => { setFocusedAgent(value => value === id ? undefined : id) }}
+                  {...!current && openAgent !== undefined ? { onOpen: () => { openAgent(id) } } : {}}
                 >
                   {conversation}
                 </AgentChrome>
