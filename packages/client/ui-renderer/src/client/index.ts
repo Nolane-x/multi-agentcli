@@ -12,6 +12,7 @@ import { buildRenderApp } from './app.tsx'
 import { SlotRegistry } from './registry.ts'
 
 export { SlotRegistry } from './registry.ts'
+export { ScopeProvider as SessionScopeProvider } from './bindings.tsx'
 export type { RootOwnerProps } from './registry.ts'
 
 export type {
