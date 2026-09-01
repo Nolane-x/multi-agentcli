@@ -17,7 +17,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-slots'
 import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
-import { mosaicCellPercent, mosaicDimension } from './spatial.ts'
+import { canvasAgentIds, mosaicCellPercent, mosaicDimension } from './spatial.ts'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 
@@ -238,11 +238,11 @@ export function AppFrame({
     return current === undefined ? undefined : s.byId[current]?.title
   })
 
-  // The canvas represents agents that matter right now: every running Session
-  // plus the selected Session. Historical idle Sessions remain available in
-  // Harness' workspace/session browser instead of flooding the spatial canvas.
+  // Follow the selected Session's complete known agent family so continuable
+  // children remain available for follow-up after their turn finishes. With no
+  // selected Session, only ambient running work surfaces.
   const activeAgentIds = useMemo(
-    () => sessionIds.filter(id => id === currentSession || sessionsById[id]?.running === true),
+    () => canvasAgentIds(sessionIds, sessionsById, currentSession),
     [currentSession, sessionIds, sessionsById],
   )
   const [focusedAgent, setFocusedAgent] = useState<SessionIdOf | undefined>()
