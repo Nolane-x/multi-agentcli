@@ -10,6 +10,7 @@ import type {
   SlotScopeAdapter,
   StandardSourceBinding,
 } from '@deepseek-ai/dsh-client-ui-renderer/client'
+import { ScopeProvider } from '../src/client/bindings.tsx'
 import { createSlotRenderer } from '../src/client/scoped-slots.tsx'
 
 function observable<T>(initial: T) {
@@ -74,15 +75,15 @@ describe('explicit slot scope', () => {
     }
     const rootEntry: StoredEntry = {
       component: (props: {
-        renderSlot: (
-          key: string,
-          owner: object,
-          opts?: { scopeKey?: string },
-        ) => ReactNode
+        renderSlot: (key: string, owner: object) => ReactNode
       }) => (
         <>
-          {props.renderSlot('k.session', {}, { scopeKey: 's1' })}
-          {props.renderSlot('k.session', {}, { scopeKey: 's2' })}
+          <ScopeProvider scope="session-maybe" scopeKey="s1">
+            {props.renderSlot('k.session', {})}
+          </ScopeProvider>
+          <ScopeProvider scope="session-maybe" scopeKey="s2">
+            {props.renderSlot('k.session', {})}
+          </ScopeProvider>
         </>
       ),
       options: {},
