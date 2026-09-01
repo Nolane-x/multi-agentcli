@@ -1,24 +1,31 @@
 /**
- * Three-column shell frame, registered into the built-in 'root' slot (the web
- * shell renders only 'root'). Owns the grid tracks (sidebar | center |
- * details), the drag handles (pointer capture + rAF throttle), the concession
- * chain (columns.ts), and the child-slot render decisions: the sidebar slot
- * renders HERE with live parameters from the concession solve, and the
- * session-aware occupants render in fixed column positions; strict entries
- * gate themselves on current-session availability while session-maybe
- * entries retain identity. Pure component: everything arrives
- * through the three framework shares — zero cordis or framework imports,
- * zero self-made hooks.
+ * Spatial multi-agent shell frame. DeepSeek Harness still owns the real
+ * conversation, details, overlay, session, approval, skill and plugin
+ * surfaces; this component only changes their spatial presentation.
+ *
+ * The left navigation becomes a floating rail, the details surface becomes a
+ * floating inspector, and live/running Sessions are represented as agent
+ * tiles. The currently selected Session keeps the complete interactive
+ * Harness conversation; background Sessions remain observable and can be
+ * brought on stage without duplicating the current-session runtime.
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import {
+  useCallback, useEffect, useLayoutEffect, useRef, useState,
+  type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode,
+} from 'react'
 import type {
-  PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
+  PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore, SessionIdOf,
 } from '@deepseek-ai/dsh-client-ui-slots'
 import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
+import { mosaicCellPercent, mosaicDimension } from './spatial.ts'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
+
+interface SpatialAgentActions {
+  /** Bring an already-known Harness Session onto the interactive stage. */
+  openAgent?: (sessionId: SessionIdOf) => void
+}
 
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
@@ -26,20 +33,123 @@ export type AppFrameProps =
   & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
   & PropsLocale<'common'>
+  & SpatialAgentActions
 
-/** Center column grid item (session-body building block). */
-function CenterColumn(props: { children?: ReactNode }) {
-  return <div className={css.centerCol}>{props.children}</div>
+/** Center canvas building block. */
+function CenterColumn(props: { children?: ReactNode; rightInset: number }) {
+  return (
+    <div
+      className={css.centerCol}
+      style={{ paddingRight: props.rightInset }}
+    >
+      {props.children}
+    </div>
+  )
 }
 
-/** Details column grid item; width 0 keeps the subtree mounted (never unmount on close). */
-function DetailsColumn(props: { children?: ReactNode }) {
-  return <div className={css.detailsCol}>{props.children}</div>
+/** Details surface; width 0 keeps the subtree mounted (never unmount on close). */
+function DetailsColumn(props: { children?: ReactNode; width: number }) {
+  return (
+    <div className={css.detailsCol} style={{ width: props.width }}>
+      {props.children}
+    </div>
+  )
+}
+
+function FocusIcon({ focused }: { focused: boolean }) {
+  return focused
+    ? (
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <path d="M7.2 3.5v3.7H3.5M12.8 3.5v3.7h3.7M7.2 16.5v-3.7H3.5M12.8 16.5v-3.7h3.7" />
+      </svg>
+    )
+    : (
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <path d="M7.2 3.5H3.5v3.7M12.8 3.5h3.7v3.7M7.2 16.5H3.5v-3.7M12.8 16.5h3.7v-3.7" />
+      </svg>
+    )
+}
+
+function AgentChrome(props: {
+  id: SessionIdOf
+  index: number
+  title: string
+  cwd?: string
+  running: boolean
+  current: boolean
+  focused: boolean
+  onOpen?: () => void
+  onToggleFocus?: () => void
+  children?: ReactNode
+  style?: CSSProperties
+}) {
+  const activate = () => {
+    if (!props.current) props.onOpen?.()
+  }
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (props.current || (event.key !== 'Enter' && event.key !== ' ')) return
+    event.preventDefault()
+    activate()
+  }
+
+  return (
+    <section
+      className={`${css.agentTile} ${props.current ? css.agentTileCurrent : css.agentTilePreview} ${props.focused ? css.agentTileFocused : ''}`}
+      style={props.style}
+      data-agent-id={props.id}
+      data-agent-current={props.current || undefined}
+      data-agent-running={props.running || undefined}
+      data-agent-focused={props.focused || undefined}
+      {...props.current ? {} : { role: 'button', tabIndex: 0, onClick: activate, onKeyDown }}
+    >
+      <header className={css.agentHeader}>
+        <div className={css.agentIdentity}>
+          <span className={css.statusDot} aria-hidden="true" />
+          <div className={css.agentTitleBlock}>
+            <div className={css.agentTitleLine}>
+              <strong>{props.title}</strong>
+              {props.index === 0 && <span className={css.leadBadge}>LEAD</span>}
+              {props.current && <span className={css.liveBadge}>LIVE</span>}
+            </div>
+            <span className={css.agentMeta} title={props.cwd ?? String(props.id)}>
+              {props.cwd ?? `session:${String(props.id).slice(0, 12)}`}
+            </span>
+          </div>
+        </div>
+        <div className={css.agentHeaderActions}>
+          <span className={css.agentState}>{props.running ? 'working' : 'ready'}</span>
+          {props.current && props.onToggleFocus !== undefined && (
+            <button
+              type="button"
+              className={css.focusButton}
+              aria-label={props.focused ? 'Return to agent mosaic' : 'Focus this agent'}
+              title={props.focused ? 'Return to mosaic (Esc)' : 'Focus agent'}
+              onClick={props.onToggleFocus}
+            >
+              <FocusIcon focused={props.focused} />
+            </button>
+          )}
+        </div>
+      </header>
+      <div className={css.agentBody}>
+        {props.children ?? (
+          <div className={css.agentPreviewBody}>
+            <div className={css.previewTerminalLine}>
+              <span className={css.promptGlyph}>›</span>
+              <span>{props.running ? 'agent is working in the background' : 'agent is ready'}</span>
+            </div>
+            <p>Open this agent to continue the full Harness session.</p>
+            <span className={css.openHint}>Enter agent <span aria-hidden="true">↗</span></span>
+          </div>
+        )}
+      </div>
+    </section>
+  )
 }
 
 /**
  * One drag handle: pointer capture, rAF-throttled dx reports against the drag-start origin.
- * `side` keys the hover-reveal CSS to the owning column.
+ * `side` keys the hover-reveal CSS to the owning floating surface.
  */
 function DragHandle(props: { side: 'sidebar' | 'details'; left: number; onStart: () => void; onDrag: (dx: number) => void; onEnd: () => void }) {
   const [dragging, setDragging] = useState(false)
@@ -87,16 +197,20 @@ function DragHandle(props: { side: 'sidebar' | 'details'; left: number; onStart:
   )
 }
 
-/** The three-column frame (see module doc). */
+/** Spatial agent frame. */
 export function AppFrame({
   useStore,
   useSessions,
   actions,
   renderSlot,
   SessionProvider,
+  openAgent,
   t,
 }: AppFrameProps) {
   const panels = useStore(s => s)
+  const sessionIds = useSessions(s => s.ids)
+  const sessionsById = useSessions(s => s.byId)
+  const currentSession = useSessions(s => s.current)
   const detailsSession = useSessions((s) => {
     const current = s.current
     return current !== undefined && s.byId[current]?.blank === false ? current : undefined
@@ -105,8 +219,29 @@ export function AppFrame({
     const current = s.current
     return current === undefined ? undefined : s.byId[current]?.title
   })
+
+  // The canvas represents agents that matter right now: every running Session
+  // plus the selected Session. Historical idle Sessions remain available in
+  // Harness' workspace/session browser instead of flooding the spatial canvas.
+  const activeAgentIds = sessionIds.filter(id => id === currentSession || sessionsById[id]?.running === true)
+  const [focusedAgent, setFocusedAgent] = useState<SessionIdOf | undefined>()
+  const focusedVisible = focusedAgent !== undefined && activeAgentIds.includes(focusedAgent)
+  const displayedAgentIds = focusedVisible ? [focusedAgent] : activeAgentIds
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
+
+  useEffect(() => {
+    if (focusedAgent !== undefined && !activeAgentIds.includes(focusedAgent)) setFocusedAgent(undefined)
+  }, [activeAgentIds, focusedAgent])
+
+  useEffect(() => {
+    if (focusedAgent === undefined) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFocusedAgent(undefined)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => { window.removeEventListener('keydown', onKeyDown) }
+  }, [focusedAgent])
 
   const lastSession = useRef(detailsSession)
   useLayoutEffect(() => {
@@ -137,12 +272,8 @@ export function AppFrame({
     }
   }, [])
 
-  // Narrow viewports auto-collapse the sidebar; the store mirror keeps
-  // toggleSidebar's semantics right (narrow toggles flip the manual
-  // re-expand override, stores.ts). Collapsed is decided here, so the
-  // solver stays breakpoint-free: a narrow re-expand passes the preference
-  // (or the default when the wide preference is closed) and the center
-  // absorbs the squeeze.
+  // Preserve Harness' concession solver and narrow-viewport behavior. The
+  // resulting widths now size floating surfaces instead of consuming tracks.
   const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
   useEffect(() => { actions.setNarrow(narrow) }, [actions, narrow])
   const sidebarCollapsed = narrow ? !panels.narrowExpanded : panels.sidebar === 0
@@ -153,13 +284,8 @@ export function AppFrame({
   const colsRef = useRef(cols)
   colsRef.current = cols
 
-  // The drag base is the rendered width captured at drag start (grabbing a
-  // concession-clamped panel must not jump back to the stored preference);
-  // it stays frozen for the whole gesture so dx deltas do not compound.
   const sidebarBase = useRef(0)
   const detailsBase = useRef(0)
-  // Track-level transitions pause for the whole gesture: eased tracks would
-  // detach the column edge from the pointer (AppFrame.module.css).
   const [dragging, setDragging] = useState(false)
   const onDragEnd = useCallback(() => { setDragging(false) }, [])
   const onSidebarStart = useCallback(() => { sidebarBase.current = colsRef.current.sidebar; setDragging(true) }, [])
@@ -170,49 +296,104 @@ export function AppFrame({
   const onDetailsDrag = useCallback((dx: number) => {
     actions.setDetails(detailsBase.current - dx)
   }, [actions])
+
   const productTitle = process.env.DSH_CLIENT_TITLE ?? t('brand.localBuild')
+  const dimension = focusedVisible ? 1 : mosaicDimension(displayedAgentIds.length)
+  const cellPercent = focusedVisible ? 100 : mosaicCellPercent(displayedAgentIds.length)
+  const gap = focusedVisible ? 0 : 12
+  const gapShare = gap * (dimension - 1) / dimension
+  const tileStyle: CSSProperties = {
+    flexBasis: `calc(${cellPercent}% - ${gapShare}px)`,
+    height: `calc(${cellPercent}% - ${gapShare}px)`,
+  }
+  const rightInset = cols.details > 0 ? cols.details + 30 : 18
 
   return (
     <div
       ref={frameRef}
       className={css.frame}
+      // Preserve the old inline track projection as an observable compatibility
+      // surface for downstream tests/plugins. CSS no longer uses it for layout.
       style={{ gridTemplateColumns: `${cols.sidebar}px minmax(0, 1fr) ${cols.details}px` }}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
       data-details-collapsed={cols.details === 0 || undefined}
       data-dragging={dragging || undefined}
+      data-agent-focus={focusedVisible || undefined}
     >
       <DocumentTitle
         productTitle={productTitle}
         {...documentTitle === undefined ? {} : { title: documentTitle }}
       />
-      <div className={css.sidebarCol}>
-        {/* Render-site slot call with live concession output: a closed
-            sidebar keeps the mounted slot at the compact-rail width, and the
-            component sees its rendered state as owner params decided here
-            (collapsed follows the resolved rail, so a derived auto-collapse
-            renders the rail UI too). */}
+
+      <div className={css.ambient} aria-hidden="true" />
+
+      <div className={css.sidebarCol} style={{ width: cols.sidebar }}>
         {renderSlot('sidebar', {
           collapsed: sidebarCollapsed,
           width: cols.sidebar,
         })}
       </div>
-      <>
-        {/* Both column occupants stay at fixed tree positions from first
-            paint — no loading gate: a bare status line reads worse than
-            the shell's own pending rendering. The conversation
-            is session-maybe; SessionProvider withholds the strict details
-            entry while no session is current. */}
-        <CenterColumn>{renderSlot('conversation', {})}</CenterColumn>
-        <DetailsColumn>
-          <SessionProvider>{renderSlot('details', {})}</SessionProvider>
-        </DetailsColumn>
-      </>
+
+      <CenterColumn rightInset={rightInset}>
+        {activeAgentIds.length === 0 ? (
+          <div className={css.emptyStage}>
+            {renderSlot('conversation', {})}
+          </div>
+        ) : (
+          <div className={css.mosaic} data-focused={focusedVisible || undefined}>
+            {displayedAgentIds.map((id) => {
+              const summary = sessionsById[id]
+              const current = id === currentSession
+              const index = activeAgentIds.indexOf(id)
+              return (
+                <AgentChrome
+                  key={id}
+                  id={id}
+                  index={index}
+                  title={summary?.displayTitle ?? `Agent ${index + 1}`}
+                  {...summary?.cwd === undefined ? {} : { cwd: summary.cwd }}
+                  running={summary?.running ?? false}
+                  current={current}
+                  focused={focusedVisible && focusedAgent === id}
+                  style={tileStyle}
+                  {...current
+                    ? { onToggleFocus: () => { setFocusedAgent(value => value === id ? undefined : id) } }
+                    : { onOpen: openAgent === undefined ? undefined : () => { openAgent(id) } }}
+                >
+                  {current ? renderSlot('conversation', {}) : undefined}
+                </AgentChrome>
+              )
+            })}
+          </div>
+        )}
+      </CenterColumn>
+
+      <DetailsColumn width={cols.details}>
+        <SessionProvider>{renderSlot('details', {})}</SessionProvider>
+      </DetailsColumn>
+
       <div className={css.overlayLayer} data-shell-overlay>
         {renderSlot('shell.overlay', {})}
       </div>
-      {/* The collapsed rail is fixed-width: no resize handle while closed. */}
-      {!sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
-      {cols.details > 0 && <DragHandle side="details" left={viewport - cols.details} onStart={onDetailsStart} onDrag={onDetailsDrag} onEnd={onDragEnd} />}
+
+      {!sidebarCollapsed && (
+        <DragHandle
+          side="sidebar"
+          left={12 + cols.sidebar}
+          onStart={onSidebarStart}
+          onDrag={onSidebarDrag}
+          onEnd={onDragEnd}
+        />
+      )}
+      {cols.details > 0 && (
+        <DragHandle
+          side="details"
+          left={viewport - cols.details - 12}
+          onStart={onDetailsStart}
+          onDrag={onDetailsDrag}
+          onEnd={onDragEnd}
+        />
+      )}
     </div>
   )
 }
