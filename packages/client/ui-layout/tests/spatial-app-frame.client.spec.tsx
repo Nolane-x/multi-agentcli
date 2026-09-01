@@ -106,16 +106,16 @@ describe('AppFrame spatial agent canvas', () => {
     expect(container.textContent).toContain('LEAD')
   })
 
-  it('opens a background agent through its header without stealing clicks from the interactive body', () => {
+  it('opens a background agent through a dedicated header control without stealing clicks from the interactive body', () => {
     const { container, openAgent } = mountSpatialFrame(5)
     const second = container.querySelector('[data-agent-id="agent-2"]') as HTMLElement
     const body = second.querySelector('[class*="agentBody"]') as HTMLElement
-    const header = second.querySelector('header') as HTMLElement
+    const open = within(second).getByRole('button', { name: 'Open Agent 2' })
 
     fireEvent.click(body)
     expect(openAgent).not.toHaveBeenCalled()
 
-    fireEvent.click(header)
+    fireEvent.click(open)
     expect(openAgent).toHaveBeenCalledTimes(1)
     expect(openAgent).toHaveBeenCalledWith('agent-2')
   })
@@ -136,8 +136,9 @@ describe('AppFrame spatial agent canvas', () => {
   })
 
   it('focuses the current agent to the full canvas and restores the mosaic with Escape', () => {
-    const { container, getByRole } = mountSpatialFrame(5)
-    fireEvent.click(getByRole('button', { name: 'Focus this agent' }))
+    const { container } = mountSpatialFrame(5)
+    const current = container.querySelector('[data-agent-current="true"]') as HTMLElement
+    fireEvent.click(within(current).getByRole('button', { name: 'Focus this agent' }))
     expect(container.querySelectorAll('[data-agent-id]')).toHaveLength(1)
     const focused = container.querySelector('[data-agent-focused="true"]') as HTMLElement
     expect(focused.style.flexBasis).toBe('calc(100% - 0px)')
