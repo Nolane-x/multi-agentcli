@@ -43,6 +43,14 @@ export interface ISessions {
    */
   open(id: SessionId): void
   /**
+   * Open one already-addressable Session's resident history/follow source
+   * without changing the current selection. This is the multi-pane staging
+   * seam: repeated calls are idempotent at the Session layer, and a stale id
+   * that is no longer addressable is ignored.
+   * @param id - listed or retained session identity.
+   */
+  stage(id: SessionId): void
+  /**
    * Open a healthy catalog child through its exact direct-parent address.
    * @param address - catalog-derived parent and child ids.
    */
