@@ -47,9 +47,10 @@ function sessionState(
 function mountSpatialFrame(
   count = 5,
   jobsBySession: SessionListState['jobsBySession'] = {},
+  stateOverride?: SessionListState,
 ) {
   const store = createLayoutStore().create()
-  const state = sessionState(count, jobsBySession)
+  const state = stateOverride ?? sessionState(count, jobsBySession)
   const openAgent = vi.fn()
   const stageAgent = vi.fn()
   const renderSlot = vi.fn((key: string) => {
@@ -110,6 +111,43 @@ describe('AppFrame spatial agent canvas', () => {
       'agent-1', 'agent-2', 'agent-3', 'agent-4', 'agent-5',
     ])
     expect(container.textContent).toContain('LEAD')
+  })
+
+  it('derives leader and child identity from the Session graph instead of rendered order', () => {
+    const base = sessionState(3)
+    const [root, child, grandchild] = base.ids
+    if (root === undefined || child === undefined || grandchild === undefined) throw new Error('missing fixture sessions')
+    const state = {
+      ...base,
+      ids: [child, root, grandchild],
+      byId: {
+        ...base.byId,
+        [grandchild]: {
+          ...base.byId[grandchild]!,
+          parentId: child,
+          origin: 'subagent' as const,
+        },
+      },
+    } as SessionListState
+
+    const { container } = mountSpatialFrame(3, {}, state)
+    const rootTile = container.querySelector(`[data-agent-id="${root}"]`) as HTMLElement
+    const childTile = container.querySelector(`[data-agent-id="${child}"]`) as HTMLElement
+    const grandchildTile = container.querySelector(`[data-agent-id="${grandchild}"]`) as HTMLElement
+
+    expect(rootTile.getAttribute('data-agent-root')).toBe('true')
+    expect(rootTile.getAttribute('data-agent-depth')).toBe('0')
+    expect(within(rootTile).getByText('LEAD')).toBeTruthy()
+
+    expect(childTile.getAttribute('data-agent-root')).toBeNull()
+    expect(childTile.getAttribute('data-agent-depth')).toBe('1')
+    expect(within(childTile).getByText('CHILD')).toBeTruthy()
+    expect(childTile.textContent).toContain('via Agent 1')
+    expect(childTile.textContent).not.toContain('LEAD')
+
+    expect(grandchildTile.getAttribute('data-agent-depth')).toBe('2')
+    expect(within(grandchildTile).getByText('D2')).toBeTruthy()
+    expect(grandchildTile.textContent).toContain('via Agent 2')
   })
 
   it('renders active one-shot subagent jobs as status-only mosaic tiles without fabricating Session surfaces', () => {
