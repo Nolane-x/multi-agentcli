@@ -7,6 +7,7 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import { ScopeProvider } from '@deepseek-ai/dsh-client-ui-renderer/src/client/bindings.tsx'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionIdOf } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
@@ -100,6 +101,10 @@ export function apply(ctx: ClientContext): void {
       inject: (actions: PanelActions) => {
         layout.attachPanels(actions)
         return {
+          // Renderer-native scope override. AppFrame itself stays framework-
+          // neutral and tests can omit this seat; production receives the real
+          // provider bound to the installed renderer host.
+          SessionScope: ScopeProvider,
           // Real navigation through the Session Controller. This is the same
           // authority used by upstream workspace/session UI, not DOM automation.
           openAgent: (sessionId: SessionIdOf) => {
