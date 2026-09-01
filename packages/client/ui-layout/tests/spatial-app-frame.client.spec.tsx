@@ -43,6 +43,7 @@ function mountSpatialFrame(count = 5) {
   const store = createLayoutStore().create()
   const state = sessionState(count)
   const openAgent = vi.fn()
+  const stageAgent = vi.fn()
   const renderSlot = vi.fn((key: string) => {
     if (key === 'conversation') return <div data-testid="conversation">conversation</div>
     if (key === 'sidebar') return <div data-testid="rail">rail</div>
@@ -52,6 +53,9 @@ function mountSpatialFrame(count = 5) {
   const useSessions = ((selector: (value: SessionListState) => unknown) => selector(state)) as never
   const useStore = hookOf(store)
   const SessionProvider: AppFrameProps['SessionProvider'] = ({ children }) => <>{children}</>
+  const SessionScope: NonNullable<AppFrameProps['SessionScope']> = ({ scopeKey, children }) => (
+    <div data-session-scope={scopeKey}>{children}</div>
+  )
 
   const view = render(
     <AppFrame
@@ -62,11 +66,13 @@ function mountSpatialFrame(count = 5) {
       useSessionPendingInteraction={((selector: (value: Map<never, never>) => unknown) => selector(new Map())) as never}
       useWorkspaces={(() => undefined) as never}
       SessionProvider={SessionProvider}
+      SessionScope={SessionScope}
       openAgent={openAgent as AppFrameProps['openAgent']}
+      stageAgent={stageAgent as AppFrameProps['stageAgent']}
       t={key => key}
     />,
   )
-  return { ...view, openAgent, state }
+  return { ...view, openAgent, stageAgent, state }
 }
 
 beforeEach(() => {
@@ -81,21 +87,33 @@ afterEach(() => {
 })
 
 describe('AppFrame spatial agent canvas', () => {
-  it('renders five live sessions as a centered 3x3-sized mosaic while keeping one real conversation surface', () => {
-    const { container, getByTestId } = mountSpatialFrame(5)
+  it('renders five live sessions as a centered 3x3-sized mosaic with five real scoped conversation occurrences', () => {
+    const { container, stageAgent } = mountSpatialFrame(5)
     const tiles = container.querySelectorAll('[data-agent-id]')
     expect(tiles).toHaveLength(5)
     expect((tiles[0] as HTMLElement).style.flexBasis).toContain('33.333')
     expect((tiles[0] as HTMLElement).style.height).toContain('33.333')
-    expect(getByTestId('conversation')).toBeTruthy()
-    expect(container.querySelectorAll('[data-testid="conversation"]')).toHaveLength(1)
+    expect(container.querySelectorAll('[data-testid="conversation"]')).toHaveLength(5)
+    expect(container.querySelectorAll('[data-session-scope]')).toHaveLength(5)
+    expect([...container.querySelectorAll('[data-session-scope]')].map(node => node.getAttribute('data-session-scope')))
+      .toEqual(['agent-1', 'agent-2', 'agent-3', 'agent-4', 'agent-5'])
+    expect(stageAgent).toHaveBeenCalledTimes(5)
+    expect(stageAgent.mock.calls.map(call => call[0])).toEqual([
+      'agent-1', 'agent-2', 'agent-3', 'agent-4', 'agent-5',
+    ])
     expect(container.textContent).toContain('LEAD')
   })
 
-  it('opens a background agent through the injected Session Controller action', () => {
+  it('opens a background agent through its header without stealing clicks from the interactive body', () => {
     const { container, openAgent } = mountSpatialFrame(5)
     const second = container.querySelector('[data-agent-id="agent-2"]') as HTMLElement
-    fireEvent.click(second)
+    const body = second.querySelector('[class*="agentBody"]') as HTMLElement
+    const header = second.querySelector('header') as HTMLElement
+
+    fireEvent.click(body)
+    expect(openAgent).not.toHaveBeenCalled()
+
+    fireEvent.click(header)
     expect(openAgent).toHaveBeenCalledTimes(1)
     expect(openAgent).toHaveBeenCalledWith('agent-2')
   })
