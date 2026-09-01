@@ -19,7 +19,10 @@ function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapsho
   }
 }
 
-function sessionState(count: number): SessionListState {
+function sessionState(
+  count: number,
+  jobsBySession: SessionListState['jobsBySession'] = {},
+): SessionListState {
   const ids = Array.from({ length: count }, (_, index) => `agent-${index + 1}` as SessionId)
   const root = ids[0]
   return {
@@ -36,14 +39,17 @@ function sessionState(count: number): SessionListState {
     current: root,
     phase: 'ready',
     subagentsByParent: {},
-    jobsBySession: {},
+    jobsBySession,
     currentAddress: undefined,
   }
 }
 
-function mountSpatialFrame(count = 5) {
+function mountSpatialFrame(
+  count = 5,
+  jobsBySession: SessionListState['jobsBySession'] = {},
+) {
   const store = createLayoutStore().create()
-  const state = sessionState(count)
+  const state = sessionState(count, jobsBySession)
   const openAgent = vi.fn()
   const stageAgent = vi.fn()
   const renderSlot = vi.fn((key: string) => {
@@ -104,6 +110,56 @@ describe('AppFrame spatial agent canvas', () => {
       'agent-1', 'agent-2', 'agent-3', 'agent-4', 'agent-5',
     ])
     expect(container.textContent).toContain('LEAD')
+  })
+
+  it('renders active one-shot subagent jobs as status-only mosaic tiles without fabricating Session surfaces', () => {
+    const jobsBySession = {
+      'agent-1': [
+        {
+          id: 'job-running',
+          kind: 'subagent',
+          label: 'Review tests',
+          status: 'running',
+          detail: 'Checking spatial regressions',
+          startedAt: 10,
+        },
+        {
+          id: 'job-finished',
+          kind: 'subagent',
+          label: 'Old review',
+          status: 'completed',
+          startedAt: 1,
+          finishedAt: 9,
+        },
+        {
+          id: 'job-shell',
+          kind: 'shell',
+          label: 'npm test',
+          status: 'running',
+          startedAt: 11,
+        },
+      ],
+    } as unknown as SessionListState['jobsBySession']
+
+    const { container, stageAgent } = mountSpatialFrame(4, jobsBySession)
+    const sessionTiles = container.querySelectorAll('[data-agent-id]')
+    const jobTiles = container.querySelectorAll('[data-agent-job-id]')
+
+    expect(sessionTiles).toHaveLength(4)
+    expect(jobTiles).toHaveLength(1)
+    expect((sessionTiles[0] as HTMLElement).style.flexBasis).toContain('33.333')
+    expect((jobTiles[0] as HTMLElement).style.flexBasis).toContain('33.333')
+    expect(jobTiles[0]?.getAttribute('data-agent-job-id')).toBe('job-running')
+    expect(jobTiles[0]?.getAttribute('data-agent-owner-id')).toBe('agent-1')
+    expect(jobTiles[0]?.textContent).toContain('Review tests')
+    expect(jobTiles[0]?.textContent).toContain('Agent 1')
+    expect(jobTiles[0]?.textContent).toContain('Checking spatial regressions')
+    expect(jobTiles[0]?.textContent).toContain('running')
+    expect(container.textContent).not.toContain('Old review')
+    expect(container.textContent).not.toContain('npm test')
+    expect(container.querySelectorAll('[data-testid="conversation"]')).toHaveLength(4)
+    expect(container.querySelectorAll('[data-session-scope]')).toHaveLength(4)
+    expect(stageAgent).toHaveBeenCalledTimes(4)
   })
 
   it('opens a background agent through a dedicated header control without stealing clicks from the interactive body', () => {
