@@ -1,8 +1,8 @@
 /**
  * Spatial layout plugin, browser half. The registration still owns the same
  * four child slots as upstream Harness; only their presentation changes.
- * Session navigation is injected as a narrow capability so an agent tile can
- * bring its real Harness Session onto the interactive stage.
+ * Session navigation and history staging are injected as narrow capabilities
+ * so agent tiles use the real Harness runtime rather than DOM automation.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -36,9 +36,9 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'sidebar': { kind: 'single'; scope: 'root'; owner: SidebarOwnerProps }
     /**
-     * The interactive Harness conversation surface. The spatial shell keeps
-     * exactly one current Session interactive until the session-stage domain
-     * is widened explicitly; background Sessions render as agent previews.
+     * The interactive Harness conversation surface. Spatial panes bind each
+     * occurrence to an explicit Session scope while ordinary consumers keep
+     * the upstream current-session behavior.
      */
     'conversation': { kind: 'single'; scope: 'session-maybe'; owner: ConvOwnerProps }
     /** Floating Session inspector. */
@@ -65,8 +65,17 @@ export interface DetailsOwnerProps {}
 /** Required services. `sessions` is provided transitively by ui-session. */
 export const inject = ['slots', 'theme', 'locale', 'sessions']
 
+interface InternalStageSession {
+  /** Session Controller's idempotent history/follow opener. */
+  open: () => Promise<void>
+}
+
 type SessionNavigationContext = ClientContext & {
-  sessions: { open: (sessionId: SessionIdOf) => void }
+  sessions: {
+    open: (sessionId: SessionIdOf) => void
+    binding: (sessionId: SessionIdOf) => { session: unknown } | undefined
+    refreshSubagents: (sessionId: SessionIdOf) => Promise<void>
+  }
 }
 
 /**
@@ -95,6 +104,20 @@ export function apply(ctx: ClientContext): void {
           // authority used by upstream workspace/session UI, not DOM automation.
           openAgent: (sessionId: SessionIdOf) => {
             sessionNavigation.open(sessionId)
+          },
+          // Multi-pane history staging deliberately does NOT mutate current
+          // selection. Session.open() is idempotent and the Session Controller
+          // keeps an opened source resident while the Session remains alive.
+          stageAgent: (sessionId: SessionIdOf) => {
+            const owner = sessionNavigation.binding(sessionId)
+            const session = owner?.session as Partial<InternalStageSession> | undefined
+            if (session?.open === undefined) return
+            void session.open().catch((error: unknown) => {
+              console.error(`[ui-layout] failed to stage session '${String(sessionId)}':`, error)
+            })
+            void sessionNavigation.refreshSubagents(sessionId).catch((error: unknown) => {
+              console.error(`[ui-layout] failed to refresh subagents for '${String(sessionId)}':`, error)
+            })
           },
         }
       },
