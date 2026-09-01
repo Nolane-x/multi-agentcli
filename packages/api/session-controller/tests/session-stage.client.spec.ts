@@ -46,6 +46,48 @@ describe('session staging', () => {
     await ctx.fiber.dispose()
   })
 
+  it('keeps repeated staging idempotent and preserves global selection', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const svc = new ClientSessions(ctx, fakeRemote(api))
+
+    await feedList(svc, api, [sid('s1'), sid('s2')])
+    svc.open(sid('s1'))
+    svc.stage(sid('s2'))
+    svc.stage(sid('s2'))
+    svc.stage(sid('s2'))
+
+    await vi.waitFor(() => {
+      expect(api.activeFollows(sid('s2'))).toBe(1)
+    })
+    expect(svc.list.getSnapshot().current).toBe(sid('s1'))
+
+    await ctx.fiber.dispose()
+  })
+
+  it('tears down an explicitly staged pane after its Session leaves the eligible list', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const svc = new ClientSessions(ctx, fakeRemote(api))
+
+    await feedList(svc, api, [sid('s1'), sid('s2')])
+    svc.open(sid('s1'))
+    svc.stage(sid('s2'))
+    await vi.waitFor(() => {
+      expect(api.activeFollows(sid('s2'))).toBe(1)
+    })
+
+    await feedList(svc, api, [sid('s1')])
+
+    expect(svc.binding(sid('s2'))).toBeUndefined()
+    await vi.waitFor(() => {
+      expect(api.activeFollows(sid('s2'))).toBe(0)
+    })
+    expect(svc.list.getSnapshot().current).toBe(sid('s1'))
+
+    await ctx.fiber.dispose()
+  })
+
   it('ignores an id that is no longer addressable instead of mutating selection', async () => {
     const ctx = new Context()
     const api = new FakeApiClient()
