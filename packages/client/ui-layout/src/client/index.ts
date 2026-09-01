@@ -1,13 +1,13 @@
 /**
  * Spatial layout plugin, browser half. The registration still owns the same
  * four child slots as upstream Harness; only their presentation changes.
- * Session navigation and history staging are injected as narrow capabilities
- * so agent tiles use the real Harness runtime rather than DOM automation.
+ * Session navigation, explicit scope binding, and history staging are injected
+ * as narrow public capabilities so agent tiles use the real Harness runtime
+ * rather than DOM automation or implementation casts.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { ScopeProvider } from '@deepseek-ai/dsh-client-ui-renderer/src/client/bindings.tsx'
+import { SessionScopeProvider } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionIdOf } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
@@ -66,16 +66,10 @@ export interface DetailsOwnerProps {}
 /** Required services. `sessions` is provided transitively by ui-session. */
 export const inject = ['slots', 'theme', 'locale', 'sessions']
 
-interface InternalStageSession {
-  /** Session Controller's idempotent history/follow opener. */
-  open: () => Promise<void>
-}
-
 type SessionNavigationContext = ClientContext & {
   sessions: {
     open: (sessionId: SessionIdOf) => void
-    binding: (sessionId: SessionIdOf) => { session: unknown } | undefined
-    refreshSubagents: (sessionId: SessionIdOf) => Promise<void>
+    stage: (sessionId: SessionIdOf) => void
   }
 }
 
@@ -101,28 +95,18 @@ export function apply(ctx: ClientContext): void {
       inject: (actions: PanelActions) => {
         layout.attachPanels(actions)
         return {
-          // Renderer-native scope override. AppFrame itself stays framework-
-          // neutral and tests can omit this seat; production receives the real
-          // provider bound to the installed renderer host.
-          SessionScope: ScopeProvider,
+          // Public renderer capability: pin one subtree to an explicit Session
+          // without changing the current-session binding used elsewhere.
+          SessionScope: SessionScopeProvider,
           // Real navigation through the Session Controller. This is the same
           // authority used by upstream workspace/session UI, not DOM automation.
           openAgent: (sessionId: SessionIdOf) => {
             sessionNavigation.open(sessionId)
           },
-          // Multi-pane history staging deliberately does NOT mutate current
-          // selection. Session.open() is idempotent and the Session Controller
-          // keeps an opened source resident while the Session remains alive.
+          // Public non-selecting Session Controller staging. The domain owns
+          // history/follow idempotence and subagent-catalog refresh semantics.
           stageAgent: (sessionId: SessionIdOf) => {
-            const owner = sessionNavigation.binding(sessionId)
-            const session = owner?.session as Partial<InternalStageSession> | undefined
-            if (session?.open === undefined) return
-            void session.open().catch((error: unknown) => {
-              console.error(`[ui-layout] failed to stage session '${String(sessionId)}':`, error)
-            })
-            void sessionNavigation.refreshSubagents(sessionId).catch((error: unknown) => {
-              console.error(`[ui-layout] failed to refresh subagents for '${String(sessionId)}':`, error)
-            })
+            sessionNavigation.stage(sessionId)
           },
         }
       },
