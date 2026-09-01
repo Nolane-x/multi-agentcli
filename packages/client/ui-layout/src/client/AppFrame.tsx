@@ -20,7 +20,7 @@ import type {
 import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import {
-  canvasAgentIds, canvasSubagentJobs, mosaicCellPercent, mosaicDimension,
+  canvasAgentIds, canvasSubagentJobs, mosaicCellPercent, mosaicDimension, spatialAgentLineage,
 } from './spatial.ts'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
@@ -87,28 +87,40 @@ function FocusIcon({ focused }: { focused: boolean }) {
 
 function AgentChrome(props: {
   id: SessionIdOf
-  index: number
   title: string
   cwd?: string
   running: boolean
   current: boolean
   focused: boolean
+  leader: boolean
+  depth: number
+  parentId?: SessionIdOf
+  parentTitle?: string
   onOpen?: () => void
   onToggleFocus?: () => void
   children?: ReactNode
   style?: CSSProperties
 }) {
+  const sessionMeta = props.cwd ?? `session:${String(props.id).slice(0, 12)}`
+  const relationMeta = props.parentTitle === undefined
+    ? sessionMeta
+    : `${sessionMeta} · via ${props.parentTitle}`
+  const relationBadge = props.leader
+    ? 'LEAD'
+    : props.depth === 1
+      ? 'CHILD'
+      : props.depth > 1 ? `D${props.depth}` : undefined
   const identity = (
     <>
       <span className={css.statusDot} aria-hidden="true" />
       <span className={css.agentTitleBlock}>
         <span className={css.agentTitleLine}>
           <strong>{props.title}</strong>
-          {props.index === 0 && <span className={css.leadBadge}>LEAD</span>}
+          {relationBadge !== undefined && <span className={css.leadBadge}>{relationBadge}</span>}
           {props.current && <span className={css.liveBadge}>LIVE</span>}
         </span>
-        <span className={css.agentMeta} title={props.cwd ?? String(props.id)}>
-          {props.cwd ?? `session:${String(props.id).slice(0, 12)}`}
+        <span className={css.agentMeta} title={relationMeta}>
+          {relationMeta}
         </span>
       </span>
     </>
@@ -122,6 +134,9 @@ function AgentChrome(props: {
       data-agent-current={props.current || undefined}
       data-agent-running={props.running || undefined}
       data-agent-focused={props.focused || undefined}
+      data-agent-root={props.leader || undefined}
+      data-agent-depth={props.depth}
+      data-agent-parent-id={props.parentId}
     >
       <header className={css.agentHeader}>
         {props.current || props.onOpen === undefined ? (
@@ -453,6 +468,10 @@ export function AppFrame({
               const summary = sessionsById[id]
               const current = id === currentSession
               const index = activeAgentIds.indexOf(id)
+              const lineage = spatialAgentLineage(id, sessionsById)
+              const parentTitle = lineage.parentId === undefined
+                ? undefined
+                : sessionsById[lineage.parentId]?.displayTitle ?? String(lineage.parentId)
               const conversation = SessionScope === undefined
                 ? current ? renderSlot('conversation', {}) : undefined
                 : (
@@ -464,12 +483,15 @@ export function AppFrame({
                 <AgentChrome
                   key={id}
                   id={id}
-                  index={index}
                   title={summary?.displayTitle ?? `Agent ${index + 1}`}
                   {...summary?.cwd === undefined ? {} : { cwd: summary.cwd }}
                   running={summary?.running ?? false}
                   current={current}
                   focused={focusedVisible && focusedAgent === id}
+                  leader={lineage.rootId === id}
+                  depth={lineage.depth}
+                  {...lineage.parentId === undefined ? {} : { parentId: lineage.parentId }}
+                  {...parentTitle === undefined ? {} : { parentTitle }}
                   style={tileStyle}
                   onToggleFocus={() => { setFocusedAgent(value => value === id ? undefined : id) }}
                   {...!current && openAgent !== undefined ? { onOpen: () => { openAgent(id) } } : {}}
