@@ -31,6 +31,14 @@ type SpatialJobsByOwner<OwnerId extends string, JobId extends string> = Readonly
   Record<OwnerId, readonly SpatialJobSummary<JobId>[]>
 >>
 
+/** Graph-derived identity used by the canvas instead of relying on visual order. */
+export interface SpatialAgentLineage<Id extends string = string> {
+  readonly rootId: Id
+  readonly parentId?: Id
+  /** Parent-edge distance from this Session to the locally-known canonical root. */
+  readonly depth: number
+}
+
 /**
  * Grid dimension used by the mosaic. The shell deliberately starts at 2×2:
  * one agent therefore occupies roughly one quarter of the canvas, 1–4 agents
@@ -62,6 +70,34 @@ function rootOf<Id extends string>(start: Id, byId: SpatialSessionMap<Id>): Id {
   // A corrupt cycle has no canonical top. The stable lexical minimum makes
   // every member of the same cycle converge on the same family root.
   return [...seen].sort()[0] ?? start
+}
+
+/**
+ * Derive one Session's locally-known parent relation and depth. This uses the
+ * same cycle-safe root authority as family selection, so presentation cannot
+ * accidentally elect the first rendered tile as leader.
+ */
+export function spatialAgentLineage<Id extends string>(
+  id: Id,
+  byId: SpatialSessionMap<Id>,
+): SpatialAgentLineage<Id> {
+  const rootId = rootOf(id, byId)
+  const parentId = byId[id]?.parentId
+  let cursor = id
+  let depth = 0
+  const seen = new Set<Id>()
+  while (cursor !== rootId && !seen.has(cursor)) {
+    seen.add(cursor)
+    const parent = byId[cursor]?.parentId
+    if (parent === undefined || byId[parent] === undefined) break
+    cursor = parent
+    depth += 1
+  }
+  return {
+    rootId,
+    ...(parentId !== undefined ? { parentId } : {}),
+    depth,
+  }
 }
 
 /** Whether one locally-known Session belongs under the selected root. */
