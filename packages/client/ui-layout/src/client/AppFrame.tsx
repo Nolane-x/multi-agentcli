@@ -4,13 +4,12 @@
  * surfaces; this component only changes their spatial presentation.
  *
  * The left navigation becomes a floating rail, the details surface becomes a
- * floating inspector, and live/running Sessions are represented as agent
- * tiles. The currently selected Session keeps the complete interactive
- * Harness conversation; background Sessions remain observable and can be
- * brought on stage without duplicating the current-session runtime.
+ * floating inspector, and active Sessions become simultaneously interactive
+ * agent tiles. Production receives a renderer-native SessionScope capability
+ * that pins each conversation occurrence to its own Harness Session binding.
  */
 import {
-  useCallback, useEffect, useLayoutEffect, useRef, useState,
+  useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
   type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode,
 } from 'react'
 import type {
@@ -22,9 +21,21 @@ import { mosaicCellPercent, mosaicDimension } from './spatial.ts'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 
+interface SessionScopeProps {
+  scope: 'session' | 'session-maybe'
+  scopeKey?: string
+  children: ReactNode
+}
+
+type SessionScopeComponent = (props: SessionScopeProps) => ReactNode
+
 interface SpatialAgentActions {
-  /** Bring an already-known Harness Session onto the interactive stage. */
+  /** Renderer-native provider used to pin one subtree to an explicit Session. */
+  SessionScope?: SessionScopeComponent
+  /** Bring an already-known Harness Session onto the global interactive stage. */
   openAgent?: (sessionId: SessionIdOf) => void
+  /** Open a Session's resident history/follow source without changing selection. */
+  stageAgent?: (sessionId: SessionIdOf) => void
 }
 
 /** Full composed props: runtime share + child-slot render share + store share. */
@@ -95,14 +106,19 @@ function AgentChrome(props: {
   return (
     <section
       className={`${css.agentTile} ${props.current ? css.agentTileCurrent : css.agentTilePreview} ${props.focused ? css.agentTileFocused : ''}`}
-      style={props.style}
+      style={{ ...props.style, cursor: 'default' }}
       data-agent-id={props.id}
       data-agent-current={props.current || undefined}
       data-agent-running={props.running || undefined}
       data-agent-focused={props.focused || undefined}
-      {...props.current ? {} : { role: 'button', tabIndex: 0, onClick: activate, onKeyDown }}
     >
-      <header className={css.agentHeader}>
+      <header
+        className={css.agentHeader}
+        style={{ cursor: !props.current && props.onOpen !== undefined ? 'pointer' : undefined }}
+        {...props.current || props.onOpen === undefined
+          ? {}
+          : { role: 'button', tabIndex: 0, onClick: activate, onKeyDown }}
+      >
         <div className={css.agentIdentity}>
           <span className={css.statusDot} aria-hidden="true" />
           <div className={css.agentTitleBlock}>
@@ -204,7 +220,9 @@ export function AppFrame({
   actions,
   renderSlot,
   SessionProvider,
+  SessionScope,
   openAgent,
+  stageAgent,
   t,
 }: AppFrameProps) {
   const panels = useStore(s => s)
@@ -223,12 +241,32 @@ export function AppFrame({
   // The canvas represents agents that matter right now: every running Session
   // plus the selected Session. Historical idle Sessions remain available in
   // Harness' workspace/session browser instead of flooding the spatial canvas.
-  const activeAgentIds = sessionIds.filter(id => id === currentSession || sessionsById[id]?.running === true)
+  const activeAgentIds = useMemo(
+    () => sessionIds.filter(id => id === currentSession || sessionsById[id]?.running === true),
+    [currentSession, sessionIds, sessionsById],
+  )
   const [focusedAgent, setFocusedAgent] = useState<SessionIdOf | undefined>()
   const focusedVisible = focusedAgent !== undefined && activeAgentIds.includes(focusedAgent)
   const displayedAgentIds = focusedVisible ? [focusedAgent] : activeAgentIds
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
+  const stagedAgents = useRef(new Set<SessionIdOf>())
+
+  // Open each visible agent's resident event source once, without changing the
+  // global selection. Removal drops it from the local staging ledger so a
+  // later reappearance can be staged again.
+  useEffect(() => {
+    const live = new Set(activeAgentIds)
+    for (const staged of [...stagedAgents.current]) {
+      if (!live.has(staged)) stagedAgents.current.delete(staged)
+    }
+    if (SessionScope === undefined || stageAgent === undefined) return
+    for (const id of activeAgentIds) {
+      if (stagedAgents.current.has(id)) continue
+      stagedAgents.current.add(id)
+      stageAgent(id)
+    }
+  }, [SessionScope, activeAgentIds, stageAgent])
 
   useEffect(() => {
     if (focusedAgent !== undefined && !activeAgentIds.includes(focusedAgent)) setFocusedAgent(undefined)
@@ -345,6 +383,13 @@ export function AppFrame({
               const summary = sessionsById[id]
               const current = id === currentSession
               const index = activeAgentIds.indexOf(id)
+              const conversation = SessionScope === undefined
+                ? current ? renderSlot('conversation', {}) : undefined
+                : (
+                  <SessionScope scope="session-maybe" scopeKey={String(id)}>
+                    {renderSlot('conversation', {})}
+                  </SessionScope>
+                )
               return (
                 <AgentChrome
                   key={id}
@@ -360,7 +405,7 @@ export function AppFrame({
                     ? { onToggleFocus: () => { setFocusedAgent(value => value === id ? undefined : id) } }
                     : openAgent === undefined ? {} : { onOpen: () => { openAgent(id) } }}
                 >
-                  {current ? renderSlot('conversation', {}) : undefined}
+                  {conversation}
                 </AgentChrome>
               )
             })}
