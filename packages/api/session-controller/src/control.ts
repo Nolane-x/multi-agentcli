@@ -1,4 +1,4 @@
-/** Live Session queue, jobs, and projection state with reconnect baselines. */
+/** Live Session queue, jobs, projection, and terminal state with reconnect baselines. */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -7,6 +7,12 @@ import type { JobId, JobSnapshot } from '@deepseek-ai/dsh-jobs'
 import type {
   Session, SessionEvent, SessionEventMap, SessionId, UserMessage,
 } from '@deepseek-ai/dsh-session'
+import type {
+  TerminalSessionId,
+  TerminalSessionSnapshot,
+  TerminalSpawnRequest,
+  TerminalSpawnResult,
+} from '@deepseek-ai/dsh-terminal'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type {
   SessionControlBaseline,
@@ -21,7 +27,7 @@ import type {
 export class SessionControlController {
   private readonly streams = new Set<ControlQueue>()
 
-  /** @param ctx - Host context carrying live Agent, projection, and jobs services. */
+  /** @param ctx - Host context carrying live Agent, projection, jobs, and optional terminal services. */
   constructor(private readonly ctx: Context) {
     ctx.on('session/event', (session, event) => { this.onSessionEvent(session, event) })
     ctx.sessionProjections.onChanged((session, key, value, seq) => {
@@ -62,6 +68,41 @@ export class SessionControlController {
     return jobs.kill(jobId, owner, 'human requested stop')
   }
 
+  /** Available PTY backend types exposed by the Host terminal registry. */
+  terminalBackends(): readonly string[] {
+    return this.terminals().listBackends()
+  }
+
+  /** List only PTY sessions owned by the addressed live Session / Agent. */
+  listTerminals(sessionId: SessionId): readonly TerminalSessionSnapshot[] {
+    return this.terminals().list(this.terminalOwner(sessionId))
+  }
+
+  /** Spawn a persistent PTY owned by the addressed live Session / Agent. */
+  openTerminal(
+    sessionId: SessionId,
+    request: TerminalSpawnRequest,
+    signal?: AbortSignal,
+  ): Promise<TerminalSpawnResult> {
+    return this.terminals().spawn(this.terminalOwner(sessionId), request, signal)
+  }
+
+  /**
+   * Close a persistent PTY through the registry's owner fence.
+   * @returns whether this call performed the close or an earlier close already owns it.
+   */
+  async closeTerminal(
+    sessionId: SessionId,
+    terminalId: TerminalSessionId,
+  ): Promise<'closed' | 'already-closing'> {
+    const closed = await this.terminals().kill(
+      this.terminalOwner(sessionId),
+      terminalId,
+      'human closed terminal',
+    )
+    return closed ? 'closed' : 'already-closing'
+  }
+
   /**
    * Open one generation of Host-wide live control state.
    * @param signal - Remote stream cancellation.
@@ -78,6 +119,18 @@ export class SessionControlController {
       this.streams.delete(queue)
       queue.end()
     }
+  }
+
+  private terminals() {
+    const terminals = this.ctx.get('terminals')
+    if (terminals === undefined) throw new Error('terminals unavailable')
+    return terminals
+  }
+
+  private terminalOwner(sessionId: SessionId): Agent {
+    const owner = this.ctx.agents.get(sessionId)
+    if (owner === undefined) throw new Error(`terminal owner ${sessionId} is not live`)
+    return owner
   }
 
   private baseline(): SessionControlBaseline {
