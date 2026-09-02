@@ -3,7 +3,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { Deque } from '@deepseek-ai/dsh-deque'
-import type { JobSnapshot } from '@deepseek-ai/dsh-jobs'
+import type { JobId, JobSnapshot } from '@deepseek-ai/dsh-jobs'
 import type {
   Session, SessionEvent, SessionEventMap, SessionId, UserMessage,
 } from '@deepseek-ai/dsh-session'
@@ -44,6 +44,22 @@ export class SessionControlController {
       for (const stream of this.streams) stream.end()
       this.streams.clear()
     }, 'session-controller.control')
+  }
+
+  /**
+   * Request cancellation of one background job through its exact live owner.
+   * The JobRegistry remains the authority for ownership and lifecycle; this
+   * controller only resolves the browser-visible Session id back to that owner.
+   * @param sessionId - owning live Session / Agent identity.
+   * @param jobId - registry-issued background job identity.
+   * @returns whether cancellation was newly requested or the job had already settled.
+   */
+  stopJob(sessionId: SessionId, jobId: JobId): 'requested' | 'already-finished' {
+    const jobs = this.ctx.get('jobs')
+    if (jobs === undefined) throw new Error('background jobs unavailable')
+    const owner = this.ctx.agents.get(sessionId)
+    if (owner === undefined) throw new Error(`background job owner ${sessionId} is not live`)
+    return jobs.kill(jobId, owner, 'human requested stop')
   }
 
   /**
