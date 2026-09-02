@@ -10,8 +10,10 @@ env:
   PRIMARY_NODE_VERSION: '24'
   DSH_TELEMETRY_DISABLED: '1'
 
+# Keep each commit's PR validation isolated so an older queued run cannot
+# strand a fresh run behind an unavailable runner or stale attempt.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
