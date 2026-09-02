@@ -87,6 +87,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   permissionPresets: 'permission-presets.md',
   planMode: 'plan.md',
   terminals: 'terminal.md',
+  terminalControlController: 'terminal.md',
   sandbox: 'sandbox.md',
   sandboxPolicy: 'sandbox.md',
   sessionPersistence: 'persistence.md',
@@ -628,6 +629,21 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   TypertPackageRecord: 'invariants.md',
   TypertSchemaFilter: 'invariants.md',
   TypertSchemaRecord: 'invariants.md',
+  SessionStopJobRequest: 'jobs.md',
+  SessionStopJobValue: 'jobs.md',
+  TerminalBackendsValue: 'terminal.md',
+  TerminalListRequest: 'terminal.md',
+  TerminalListValue: 'terminal.md',
+  TerminalOpenRequest: 'terminal.md',
+  TerminalOpenValue: 'terminal.md',
+  TerminalWriteRequest: 'terminal.md',
+  TerminalResizeRequest: 'terminal.md',
+  TerminalSignalRequest: 'terminal.md',
+  TerminalSignalValue: 'terminal.md',
+  TerminalAddressRequest: 'terminal.md',
+  TerminalCloseValue: 'terminal.md',
+  TerminalOutputFrame: 'terminal.md',
+
 }
 
 /** TypeScript lib and pinned framework types with no repository-owned data page. */

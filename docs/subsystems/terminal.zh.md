@@ -114,6 +114,74 @@ interface TerminalSendResult {
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxterminalcontrolcontroller--terminalcontrolcontroller"></a>
+
+### `ctx.terminalControlController` — `TerminalControlController`
+
+Host service backing the generated `ctx.remote.terminal` namespace.
+
+```ts cordis-catalog
+/**
+ * List PTY backend types available on this Host.
+ * @returns the registered backend type names.
+ */
+@Remote backends(): TerminalBackendsValue
+
+/**
+ * List published PTYs owned by the exact live Agent for one Session.
+ * @param request - Session identity whose exact live Agent owns the terminals.
+ * @returns the owner-visible terminal collection.
+ */
+@Remote('list') list(request: TerminalListRequest): TerminalListValue
+
+/**
+ * Create and publish one PTY under the exact live Agent owner.
+ * @param request - terminal backend, optional name, optional cwd, and owning Session identity.
+ * @param signal - cancellation signal for the PTY spawn operation.
+ * @returns the newly published terminal plus its bounded startup message.
+ */
+@Remote('open') async open(request: TerminalOpenRequest, signal: AbortSignal): Promise<TerminalOpenValue>
+
+/**
+ * Write exact terminal input, including control sequences and partial lines.
+ * @param request - target Session/terminal identity and exact input bytes-as-text.
+ * @returns a promise that resolves when the input is accepted by the PTY registry.
+ */
+@Remote('write') async write(request: TerminalWriteRequest): Promise<void>
+
+/**
+ * Resize one live PTY and its terminal emulator geometry.
+ * @param request - target Session/terminal identity and positive row/column geometry.
+ * @returns a promise that resolves when the PTY resize is accepted.
+ */
+@Remote('resize') async resize(request: TerminalResizeRequest): Promise<void>
+
+/**
+ * Deliver one allowlisted signal to the verified foreground process group.
+ * @param request - target Session/terminal identity and allowlisted process signal.
+ * @returns delivery acknowledgement containing the target process-group id.
+ */
+@Remote('signal') signal(request: TerminalSignalRequest): Promise<TerminalSignalValue>
+
+/**
+ * Close one PTY while preserving registry-owned cleanup fencing.
+ * @param request - target Session/terminal identity to close.
+ * @returns whether this call acquired and performed the close operation.
+ */
+@Remote('close') async close(request: TerminalAddressRequest): Promise<TerminalCloseValue>
+
+/**
+ * Stream exact decoded PTY output for a terminal UI. ANSI and control sequences
+ * are preserved; cancellation detaches the observer without killing the PTY.
+ * @param request - target Session/terminal identity whose output is observed.
+ * @param signal - cancellation signal that detaches the output observer.
+ * @returns an async stream of exact PTY output frames.
+ */
+@Remote({ mode: 'stream' }) async *output(request: TerminalAddressRequest, signal: AbortSignal): AsyncIterable<TerminalOutputFrame>
+```
+
+Source: [`packages/api/session-controller/src/terminal-control.ts`](../../packages/api/session-controller/src/terminal-control.ts)
+
 <a id="ctxterminals--terminalsessionservice"></a>
 
 ### `ctx.terminals` — `TerminalSessionService`
@@ -167,6 +235,32 @@ startSend(owner: Agent, id: TerminalSessionId, request: TerminalSendRequest): Te
  * @returns bounded retained text and pagination metadata.
  */
 read(owner: Agent, id: TerminalSessionId, request: TerminalReadRequest = {}): TerminalReadResult
+
+/**
+ * Subscribe to exact decoded PTY output before sanitizer/render transforms.
+ * @param owner - exact session owner.
+ * @param id - target PTY identity.
+ * @param listener - synchronous consumer of ANSI/control-preserving output chunks.
+ * @returns idempotent subscription disposer.
+ */
+subscribeOutput(owner: Agent, id: TerminalSessionId, listener: (data: string) => void): () => void
+
+/**
+ * Write exact terminal input for an owned session without line-oriented readiness semantics.
+ * @param owner - exact session owner.
+ * @param id - target PTY identity.
+ * @param data - exact UTF-8/control-sequence data to write.
+ */
+async write(owner: Agent, id: TerminalSessionId, data: string): Promise<void>
+
+/**
+ * Resize one owned live terminal without restarting its process session.
+ * @param owner - exact session owner.
+ * @param id - target PTY identity.
+ * @param rows - positive safe-integer terminal row count.
+ * @param cols - positive safe-integer terminal column count.
+ */
+async resize(owner: Agent, id: TerminalSessionId, rows: number, cols: number): Promise<void>
 
 /**
  * Deliver an allowed signal through an owned backend session.
