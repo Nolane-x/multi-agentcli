@@ -1,0 +1,38 @@
+name: one-shot contract cleanup
+
+on:
+  push:
+    branches:
+      - nolane/spatial-agent-shell-v2
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: "!contains(github.event.head_commit.message, '[one-shot-cleanup]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: nolane/spatial-agent-shell-v2
+      - name: Align source contract wording and remove helper workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('packages/subprocess/subprocess/src/types.ts')
+          s = p.read_text()
+          old = '/** Offset-based readers for the streams spawned in collect mode. */'
+          new = '/** Offset-based readers for collect-mode streams (also readable after exit). */'
+          if old not in s:
+              raise SystemExit('expected source JSDoc was not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git rm .github/workflows/one-shot-doc-contract.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add packages/subprocess/subprocess/src/types.ts
+          git commit -m 'docs: align generated subprocess contract [one-shot-cleanup]'
+          git push origin HEAD:nolane/spatial-agent-shell-v2
