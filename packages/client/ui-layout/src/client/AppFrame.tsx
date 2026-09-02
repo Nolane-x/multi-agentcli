@@ -88,6 +88,7 @@ function FocusIcon({ focused }: { focused: boolean }) {
 }
 
 function AgentChrome(props: {
+  t: AppFrameProps['t']
   id: SessionIdOf
   title: string
   cwd?: string
@@ -106,11 +107,11 @@ function AgentChrome(props: {
   const sessionMeta = props.cwd ?? `session:${String(props.id).slice(0, 12)}`
   const relationMeta = props.parentTitle === undefined
     ? sessionMeta
-    : `${sessionMeta} · via ${props.parentTitle}`
+    : props.t('spatial.agent.via', { name: props.parentTitle })
   const relationBadge = props.leader
-    ? 'LEAD'
+    ? props.t('spatial.agent.lead')
     : props.depth === 1
-      ? 'CHILD'
+      ? props.t('spatial.agent.child')
       : props.depth > 1 ? `D${props.depth}` : undefined
   const identity = (
     <>
@@ -119,7 +120,7 @@ function AgentChrome(props: {
         <span className={css.agentTitleLine}>
           <strong>{props.title}</strong>
           {relationBadge !== undefined && <span className={css.leadBadge}>{relationBadge}</span>}
-          {props.current && <span className={css.liveBadge}>LIVE</span>}
+          {props.current && <span className={css.liveBadge}>{props.t('spatial.agent.live')}</span>}
         </span>
         <span className={css.agentMeta} title={relationMeta}>
           {relationMeta}
@@ -149,20 +150,20 @@ function AgentChrome(props: {
           <button
             type="button"
             className={`${css.agentIdentity} ${css.agentOpenButton}`}
-            aria-label={`Open ${props.title}`}
+            aria-label={props.t('spatial.agent.open', { name: props.title })}
             onClick={props.onOpen}
           >
             {identity}
           </button>
         )}
         <div className={css.agentHeaderActions}>
-          <span className={css.agentState}>{props.running ? 'working' : 'ready'}</span>
+          <span className={css.agentState}>{props.running ? props.t('spatial.agent.working') : props.t('spatial.agent.ready')}</span>
           {props.onToggleFocus !== undefined && (
             <button
               type="button"
               className={css.focusButton}
-              aria-label={props.focused ? 'Return to agent mosaic' : 'Focus this agent'}
-              title={props.focused ? 'Return to mosaic (Esc)' : 'Focus agent'}
+              aria-label={props.focused ? props.t('spatial.agent.returnToMosaic') : props.t('spatial.agent.focus')}
+              title={props.focused ? props.t('spatial.agent.returnToMosaicTitle') : props.t('spatial.agent.focusTitle')}
               onClick={props.onToggleFocus}
             >
               <FocusIcon focused={props.focused} />
@@ -175,10 +176,10 @@ function AgentChrome(props: {
           <div className={css.agentPreviewBody}>
             <div className={css.previewTerminalLine}>
               <span className={css.promptGlyph}>›</span>
-              <span>{props.running ? 'agent is working in the background' : 'agent is ready'}</span>
+              <span>{props.running ? props.t('spatial.agent.backgroundWorking') : props.t('spatial.agent.backgroundReady')}</span>
             </div>
-            <p>Open this agent to continue the full Harness session.</p>
-            <span className={css.openHint}>Enter agent <span aria-hidden="true">↗</span></span>
+            <p>{props.t('spatial.agent.openToContinue')}</p>
+            <span className={css.openHint}>{props.t('spatial.agent.enter')} <span aria-hidden="true">↗</span></span>
           </div>
         )}
       </div>
@@ -192,6 +193,7 @@ function AgentChrome(props: {
  * lifecycle cards without inventing renderer/session affordances.
  */
 function SubagentJobTile(props: {
+  t: AppFrameProps['t']
   ownerId: SessionIdOf
   ownerTitle: string
   job: {
@@ -214,7 +216,7 @@ function SubagentJobTile(props: {
       data-agent-owner-id={props.ownerId}
       data-agent-running={active || undefined}
       data-agent-stop-requested={props.stopRequested || undefined}
-      aria-label={`${props.job.label}, one-shot subagent ${stopping ? 'stopping' : props.job.status}`}
+      aria-label={props.t('spatial.agent.oneShotAria', { label: props.job.label, status: stopping ? props.t('spatial.agent.stopping') : props.job.status })}
     >
       <header className={css.agentHeader}>
         <div className={css.agentIdentity}>
@@ -222,21 +224,21 @@ function SubagentJobTile(props: {
           <span className={css.agentTitleBlock}>
             <span className={css.agentTitleLine}>
               <strong>{props.job.label}</strong>
-              <span className={css.leadBadge}>ONE-SHOT</span>
+              <span className={css.leadBadge}>{props.t('spatial.agent.oneShot')}</span>
             </span>
             <span className={css.agentMeta} title={String(props.ownerId)}>
-              via {props.ownerTitle}
+              {props.t('spatial.agent.via', { name: props.ownerTitle })}
             </span>
           </span>
         </div>
         <div className={css.agentHeaderActions}>
-          <span className={css.agentState}>{stopping ? 'stopping' : props.job.status}</span>
+          <span className={css.agentState}>{stopping ? props.t('spatial.agent.stopping') : props.t(`spatial.agent.status.${props.job.status}` as Parameters<AppFrameProps['t']>[0])}</span>
           {props.job.status === 'running' && props.onStop !== undefined && (
             <button
               type="button"
               className={css.focusButton}
-              aria-label={props.stopRequested ? `Stopping ${props.job.label}` : `Stop ${props.job.label}`}
-              title={props.stopRequested ? 'Stop requested' : 'Stop one-shot agent'}
+              aria-label={props.stopRequested ? props.t('spatial.agent.stoppingLabel', { name: props.job.label }) : props.t('spatial.agent.stopLabel', { name: props.job.label })}
+              title={props.stopRequested ? props.t('spatial.agent.stopRequested') : props.t('spatial.agent.stopOneShot')}
               disabled={props.stopRequested}
               onClick={props.onStop}
             >
@@ -249,10 +251,10 @@ function SubagentJobTile(props: {
         <div className={css.agentPreviewBody}>
           <div className={css.previewTerminalLine}>
             <span className={css.promptGlyph} aria-hidden="true">↳</span>
-            <span>delegated by {props.ownerTitle}</span>
+            <span>{props.t('spatial.agent.delegatedBy', { name: props.ownerTitle })}</span>
           </div>
-          <p>{props.job.detail ?? 'One-shot subagent execution is active.'}</p>
-          <span className={css.openHint}>job:{String(props.job.id).slice(0, 12)}</span>
+          <p>{props.job.detail ?? props.t('spatial.agent.executionActive')}</p>
+          <span className={css.openHint}>{props.t('spatial.agent.job', { id: String(props.job.id).slice(0, 12) })}</span>
         </div>
       </div>
     </section>
@@ -546,7 +548,8 @@ export function AppFrame({
                 <AgentChrome
                   key={id}
                   id={id}
-                  title={summary?.displayTitle ?? `Agent ${index + 1}`}
+                  t={t}
+                  title={summary?.displayTitle ?? `${t('spatial.agent.agent')} ${index + 1}`}
                   {...summary?.cwd === undefined ? {} : { cwd: summary.cwd }}
                   running={summary?.running ?? false}
                   current={current}
@@ -569,6 +572,7 @@ export function AppFrame({
               return (
                 <SubagentJobTile
                   key={`job:${jobId}`}
+                  t={t}
                   ownerId={ownerId}
                   ownerTitle={sessionsById[ownerId]?.displayTitle ?? String(ownerId)}
                   job={job}
