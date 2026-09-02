@@ -1,0 +1,38 @@
+[33mThe plugin "vite-tsconfig-paths" is detected. Vite now supports tsconfig paths resolution natively via the [1mresolve.tsconfigPaths[22m option. You can remove the plugin and set [1mresolve.tsconfigPaths: true[22m in your Vite config instead.[39m
+[33mThe plugin "vite-tsconfig-paths" is detected. Vite now supports tsconfig paths resolution natively via the [1mresolve.tsconfigPaths[22m option. You can remove the plugin and set [1mresolve.tsconfigPaths: true[22m in your Vite config instead.[39m
+[33mThe plugin "vite-tsconfig-paths" is detected. Vite now supports tsconfig paths resolution natively via the [1mresolve.tsconfigPaths[22m option. You can remove the plugin and set [1mresolve.tsconfigPaths: true[22m in your Vite config instead.[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.8 [39m[90m/home/runner/work/multi-agentcli/multi-agentcli[39m
+
+ [31m❯[39m [30m[45m thread-safe [49m[39m packages/api/session-controller/tests/control-terminal.host.spec.ts [2m([22m[2m1 test[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 26[2mms[22m[39m
+[31m     [31m×[31m opens, interacts with, and closes a PTY only through the addressed live Session owner[39m[32m 24[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[45m thread-safe [49m[39m packages/api/session-controller/tests/control-terminal.host.spec.ts[2m > [22mSessionControlController terminal ownership seam[2m > [22mopens, interacts with, and closes a PTY only through the addressed live Session owner
+[31m[1mTerminalError[22m: PTY session pty-1 belongs to another agent[39m
+[36m [2m❯[22m Proxy.expectOwned packages/terminal/terminal/src/index.ts:[2m390:39[22m[39m
+    [90m388|[39m     [35mconst[39m record [33m=[39m [35mthis[39m[33m.[39msessions[33m.[39m[35mget[39m(id)
+    [90m389|[39m     if (record === undefined) throw new TerminalError(`unknown PTY ses…
+    [90m390|[39m     if (record.owner !== owner) throw new TerminalError(`PTY session $…
+    [90m   |[39m                                       [31m^[39m
+    [90m391|[39m     [35mreturn[39m record
+    [90m392|[39m   }
+[90m [2m❯[22m Object.apply vendor/cordis/src/utils.ts:[2m160:40[22m[39m
+[90m [2m❯[22m Proxy.startSend packages/terminal/terminal/src/index.ts:[2m244:25[22m[39m
+[90m [2m❯[22m Object.apply vendor/cordis/src/utils.ts:[2m160:40[22m[39m
+[90m [2m❯[22m SessionControlController.sendTerminal packages/api/session-controller/src/control.ts:[2m102:29[22m[39m
+[90m [2m❯[22m packages/api/session-controller/tests/control-terminal.host.spec.ts:[2m177:26[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m   Start at [22m 05:07:01
+[2m   Duration [22m 839ms[2m (transform 583ms, setup 238ms, import 436ms, tests 26ms, environment 0ms)[22m
+
+
+::error file=/home/runner/work/multi-agentcli/multi-agentcli/packages/terminal/terminal/src/index.ts,title=[thread-safe] packages/api/session-controller/tests/control-terminal.host.spec.ts > SessionControlController terminal ownership seam > opens%2C interacts with%2C and closes a PTY only through the addressed live Session owner,line=390,column=39::TerminalError: PTY session pty-1 belongs to another agent%0A ❯ Proxy.expectOwned packages/terminal/terminal/src/index.ts:390:39%0A ❯ Object.apply vendor/cordis/src/utils.ts:160:40%0A ❯ Proxy.startSend packages/terminal/terminal/src/index.ts:244:25%0A ❯ Object.apply vendor/cordis/src/utils.ts:160:40%0A ❯ SessionControlController.sendTerminal packages/api/session-controller/src/control.ts:102:29%0A ❯ packages/api/session-controller/tests/control-terminal.host.spec.ts:177:26%0A%0A⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯%0ASerialized Error: { code: 'FOREIGN_SESSION' }%0A
+
+exit_status=1
