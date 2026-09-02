@@ -2,6 +2,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-agent/types'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { createSessionControlStream } from './transport.ts'
 import { ClientSessions } from './sessions/service.ts'
 import type { SessionRemotes } from './sessions/remotes.ts'
@@ -83,12 +84,41 @@ export const inject = [
 ]
 
 /**
+ * Runtime-composed Session service. The base ClientSessions stays the stable
+ * outward implementation while product-specific human control is layered here,
+ * where the generated Session Remote is already an explicit dependency.
+ */
+class RuntimeClientSessions extends ClientSessions {
+  constructor(
+    ctx: Context,
+    private readonly runtimeRemotes: SessionRemotes,
+  ) {
+    super(ctx, runtimeRemotes)
+  }
+
+  /**
+   * Request cancellation of one background job through the Host's exact-owner
+   * Session control. Remote failure means the request was not admitted.
+   * @param sessionId - Session whose live Agent owns the job.
+   * @param jobId - registry-issued job identity projected to the browser.
+   * @returns true when the Host accepted the operation.
+   */
+  async stopJob(sessionId: SessionId, jobId: string): Promise<boolean> {
+    const result = await this.runtimeRemotes.session.stopJob({
+      sessionId,
+      jobId: jobId as never,
+    })
+    return result.ok
+  }
+}
+
+/**
  * Install Client Session state and its reconnecting control stream.
  * @param ctx - Client Cordis context.
  */
 export function apply(ctx: Context): void {
   const remotes = ctx.remote as unknown as SessionRemotes
-  const sessions = new ClientSessions(ctx, remotes)
+  const sessions = new RuntimeClientSessions(ctx, remotes)
   ctx.remote.$on('api-session/added', (summary) => { sessions.handleSessionAdded(summary) })
   ctx.remote.$on('api-session/removed', (sessionId) => { sessions.handleSessionRemoved(sessionId) })
   ctx.remote.$on('api-session/status', (sessionId, running) => {
