@@ -834,9 +834,6 @@ importers:
       '@deepseek-ai/dsh-subagent':
         specifier: workspace:^
         version: link:../../subagent/subagent
-      '@deepseek-ai/dsh-terminal':
-        specifier: workspace:^
-        version: link:../../terminal/terminal
       '@deepseek-ai/dsh-typert-protocol':
         specifier: workspace:^
         version: link:../../typert/protocol
