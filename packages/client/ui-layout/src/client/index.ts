@@ -1,9 +1,9 @@
 /**
  * Spatial layout plugin, browser half. The registration still owns the same
  * four child slots as upstream Harness; only their presentation changes.
- * Session navigation, explicit scope binding, and history staging are injected
- * as narrow public capabilities so agent tiles use the real Harness runtime
- * rather than DOM automation or implementation casts.
+ * Session navigation, explicit scope binding, history staging, and one-shot
+ * job control are injected as narrow public capabilities so agent tiles use
+ * the real Harness runtime rather than DOM automation or implementation casts.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -63,13 +63,21 @@ export interface ConvOwnerProps {}
 /** Details owner share: sessionId arrives as a framework-standard prop. */
 export interface DetailsOwnerProps {}
 
-/** Required services. `sessions` is provided transitively by ui-session. */
-export const inject = ['slots', 'theme', 'locale', 'sessions']
+/** Required services. Session state and its Host control namespace stay separate capabilities. */
+export const inject = ['slots', 'theme', 'locale', 'sessions', 'remote.session']
 
-type SessionNavigationContext = ClientContext & {
+type SpatialRuntimeContext = ClientContext & {
   sessions: {
     open: (sessionId: SessionIdOf) => void
     stage: (sessionId: SessionIdOf) => void
+  }
+  remote: {
+    session: {
+      stopJob: (request: { sessionId: SessionIdOf; jobId: string }) => Promise<
+        | { ok: true; value: { result: 'requested' | 'already-finished' } }
+        | { ok: false; error: unknown }
+      >
+    }
   }
 }
 
@@ -81,7 +89,9 @@ export function apply(ctx: ClientContext): void {
   const layout = new LayoutController()
   ctx.effect(() => {
     const disposeService = ctx.reflect.provide('layout', layout)
-    const sessionNavigation = (ctx as SessionNavigationContext).sessions
+    const runtime = ctx as SpatialRuntimeContext
+    const sessionNavigation = runtime.sessions
+    const sessionControl = runtime.remote.session
     const disposeRegistration = ctx.slots.register({
       name: 'root',
       locale: 'common',
@@ -107,6 +117,12 @@ export function apply(ctx: ClientContext): void {
           // history/follow idempotence and subagent-catalog refresh semantics.
           stageAgent: (sessionId: SessionIdOf) => {
             sessionNavigation.stage(sessionId)
+          },
+          // One-shot work remains a JobRegistry concern. The UI receives only
+          // this boolean-admission wrapper over the owner-fenced Host Remote.
+          stopAgentJob: async (sessionId: SessionIdOf, jobId: string) => {
+            const result = await sessionControl.stopJob({ sessionId, jobId })
+            return result.ok
           },
         }
       },
