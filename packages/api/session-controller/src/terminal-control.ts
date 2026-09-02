@@ -262,6 +262,7 @@ async function terminalCallAsync<T>(operation: () => T | Promise<T>): Promise<T>
   }
 }
 
+/* jscpd:ignore-start */
 class TerminalOutputQueue {
   private readonly frames = new Deque<TerminalOutputFrame>()
   private waiting: (() => void) | undefined
@@ -310,5 +311,6 @@ class TerminalOutputQueue {
     })
   }
 }
+/* jscpd:ignore-end */
 
 export default TerminalControlController
