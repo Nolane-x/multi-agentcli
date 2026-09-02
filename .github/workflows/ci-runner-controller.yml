@@ -13,6 +13,7 @@ jobs:
     name: normalize PR Linux runner
     runs-on: ubuntu-latest
     steps:
+      # Second-push activation ensures GitHub executes the already-installed controller.
       - name: Patch PR branch and remove controller
         uses: actions/github-script@v7
         env:
