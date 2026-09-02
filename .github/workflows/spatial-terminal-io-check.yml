@@ -1,0 +1,37 @@
+name: Spatial terminal I/O RED
+
+on:
+  push:
+    branches:
+      - nolane/spatial-agent-shell
+    paths:
+      - .github/workflows/spatial-terminal-io-check.yml
+
+permissions:
+  contents: read
+
+jobs:
+  terminal-io-red:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.9.0
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Prove expected missing terminal I/O API RED
+        shell: bash
+        run: |
+          set +e
+          output=$(pnpm exec vitest run packages/api/session-controller/tests/control-terminal.host.spec.ts 2>&1)
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if (( status == 0 )); then
+            echo 'Expected terminal I/O seam spec to fail before implementation.' >&2
+            exit 1
+          fi
+          grep -F 'sendTerminal is not a function' <<<"$output"
