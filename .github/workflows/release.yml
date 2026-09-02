@@ -106,7 +106,19 @@ jobs:
         run: pnpm run release:verify --family dsh
 
       - name: Build
-        run: pnpm run build:official
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm run build:official 2>&1 | tee "$RUNNER_TEMP/dsh-build.log"
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-build-log
+          path: ${{ runner.temp }}/dsh-build.log
+          if-no-files-found: error
+          retention-days: 1
 
       # Concurrency here is rehearsal-only: the credentialed publish workflows
       # invoke release:pack without the flag and keep the strictly serial path.
