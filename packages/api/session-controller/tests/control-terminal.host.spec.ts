@@ -8,12 +8,15 @@ import TerminalSessionService from '@deepseek-ai/dsh-terminal'
 import type {
   TerminalBackendSession,
   TerminalReadRequest,
+  TerminalReadResult,
   TerminalSendOperation,
   TerminalSendRequest,
+  TerminalSendResult,
   TerminalSessionId,
   TerminalSessionSnapshot,
   TerminalSessionStatus,
   TerminalSignal,
+  TerminalSignalResult,
   TerminalSpawnRequest,
   TerminalSpawnResult,
 } from '@deepseek-ai/dsh-terminal'
@@ -28,6 +31,21 @@ interface TerminalControlFace {
     request: TerminalSpawnRequest,
     signal?: AbortSignal,
   ): Promise<TerminalSpawnResult>
+  sendTerminal(
+    sessionId: SessionId,
+    terminalId: TerminalSessionId,
+    request: TerminalSendRequest,
+  ): Promise<TerminalSendResult>
+  readTerminal(
+    sessionId: SessionId,
+    terminalId: TerminalSessionId,
+    request?: TerminalReadRequest,
+  ): TerminalReadResult
+  signalTerminal(
+    sessionId: SessionId,
+    terminalId: TerminalSessionId,
+    signal: TerminalSignal,
+  ): Promise<TerminalSignalResult>
   closeTerminal(sessionId: SessionId, terminalId: TerminalSessionId): Promise<'closed' | 'already-closing'>
 }
 
@@ -47,26 +65,38 @@ class StubTerminal implements TerminalBackendSession {
   readonly motd = 'stub ready'
   readonly pid = 4242
   readonly close = vi.fn(async (_reason: string) => {})
+  readonly sends: TerminalSendRequest[] = []
+  readonly reads: TerminalReadRequest[] = []
+  readonly signals: TerminalSignal[] = []
 
-  startSend(_request: TerminalSendRequest): TerminalSendOperation {
+  startSend(request: TerminalSendRequest): TerminalSendOperation {
+    this.sends.push(request)
     return {
       done: Promise.resolve({
-        viewport: '',
+        viewport: `ran:${request.text}`,
         waitReason: 'inferred_idle',
         sessionStatus: { kind: 'running' },
         truncated: false,
       }),
-      readOutput: () => ({ delta: '', truncated: false }),
+      readOutput: () => ({ delta: `ran:${request.text}`, truncated: false }),
       cancel: () => false,
     }
   }
 
-  read(_request: TerminalReadRequest) {
-    return { text: '', totalLines: 0, lineBegin: 0, lineEnd: 0, truncated: false }
+  read(request: TerminalReadRequest): TerminalReadResult {
+    this.reads.push(request)
+    return {
+      text: 'retained terminal output',
+      totalLines: 12,
+      lineBegin: request.offset ?? 0,
+      lineEnd: (request.offset ?? 0) + (request.count ?? 4),
+      truncated: false,
+    }
   }
 
-  async signal(_signal: TerminalSignal) {
-    return { delivered: true as const, targetPgid: 4242 }
+  async signal(signal: TerminalSignal): Promise<TerminalSignalResult> {
+    this.signals.push(signal)
+    return { delivered: true, targetPgid: 4242 }
   }
 
   status(): TerminalSessionStatus {
@@ -75,7 +105,7 @@ class StubTerminal implements TerminalBackendSession {
 }
 
 describe('SessionControlController terminal ownership seam', () => {
-  it('opens, lists, and closes a PTY only through the addressed live Session owner', async () => {
+  it('opens, interacts with, and closes a PTY only through the addressed live Session owner', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(AgentRegistry)
@@ -120,7 +150,39 @@ describe('SessionControlController terminal ownership seam', () => {
     ])
     expect(control.listTerminals(secondSession.id)).toEqual([])
 
+    await expect(control.sendTerminal(firstSession.id, opened.sessionId, {
+      text: 'codex --help',
+      submit: true,
+    })).resolves.toEqual({
+      viewport: 'ran:codex --help',
+      waitReason: 'inferred_idle',
+      sessionStatus: { kind: 'running' },
+      truncated: false,
+    })
+    expect(control.readTerminal(firstSession.id, opened.sessionId, { offset: 2, count: 3 })).toEqual({
+      text: 'retained terminal output',
+      totalLines: 12,
+      lineBegin: 2,
+      lineEnd: 5,
+      truncated: false,
+    })
+    await expect(control.signalTerminal(firstSession.id, opened.sessionId, 'SIGINT')).resolves.toEqual({
+      delivered: true,
+      targetPgid: 4242,
+    })
+    expect(terminals[0]?.sends).toEqual([{ text: 'codex --help', submit: true }])
+    expect(terminals[0]?.reads).toEqual([{ offset: 2, count: 3 }])
+    expect(terminals[0]?.signals).toEqual(['SIGINT'])
+
+    await expect(control.sendTerminal(secondSession.id, opened.sessionId, {
+      text: 'steal-session',
+      submit: true,
+    })).rejects.toThrow('belongs to another agent')
+    expect(() => control.readTerminal(secondSession.id, opened.sessionId)).toThrow('belongs to another agent')
+    await expect(control.signalTerminal(secondSession.id, opened.sessionId, 'SIGTERM'))
+      .rejects.toThrow('belongs to another agent')
     await expect(control.closeTerminal(secondSession.id, opened.sessionId)).rejects.toThrow('belongs to another agent')
+
     await expect(control.closeTerminal(firstSession.id, opened.sessionId)).resolves.toBe('closed')
     expect(terminals[0]?.close).toHaveBeenCalledWith('human closed terminal')
     expect(control.listTerminals(firstSession.id)).toEqual([])
