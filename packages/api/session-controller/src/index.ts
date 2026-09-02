@@ -2,6 +2,7 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import type { JobId } from '@deepseek-ai/dsh-jobs'
 import { errorChain } from '@deepseek-ai/dsh-llm'
 import { canOpenNativePath, openNativePath } from '@deepseek-ai/dsh-native-command'
 import type { SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
@@ -77,6 +78,17 @@ export interface SessionControllerInternals {
   readonly openPath?: (path: string, signal: AbortSignal) => Promise<void>
   /** Native handoff availability probe. */
   readonly canOpenPath?: () => boolean
+}
+
+/** Browser request to stop one owner-fenced background job. */
+export interface SessionStopJobRequest {
+  readonly sessionId: SessionId
+  readonly jobId: JobId
+}
+
+/** Registry result after a human stop request. */
+export interface SessionStopJobValue {
+  readonly result: 'requested' | 'already-finished'
 }
 
 /** Host service backing the generated `ctx.remote.session` namespace. */
@@ -352,6 +364,27 @@ export class SessionController extends TypertRemoteService {
   @Remote('cancel')
   cancel(request: SessionCancelRequest): SessionCancelValue {
     return this.commands.cancel(request)
+  }
+
+  /**
+   * Request cancellation of one background job visible under a live Session.
+   * The JobRegistry enforces exact-owner access; the browser never receives a
+   * registry service handle.
+   * @param request - owner Session and registry-issued job identity.
+   * @returns registry cancellation admission state.
+   */
+  @Remote('stopJob')
+  stopJob(request: SessionStopJobRequest): SessionStopJobValue {
+    try {
+      return { result: this.controlState.stopJob(request.sessionId, request.jobId) }
+    } catch (error: unknown) {
+      throw new RemoteError(
+        'gateway/bad-request',
+        'background job is unavailable for this Session',
+        {},
+        { cause: error },
+      )
+    }
   }
 
   /**
