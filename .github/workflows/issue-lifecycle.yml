@@ -56,9 +56,22 @@ jobs:
             echo 'enabled=false' >> "$GITHUB_OUTPUT"
             echo "Issue lifecycle not configured for $GITHUB_REPOSITORY; trusted configuration targets $configured_repository. Passing without applying upstream lifecycle automation."
           fi
+      - name: Detect project credentials
+        id: credentials
+        env:
+          ISSUE_APP_CLIENT_ID: ${{ vars.DSH_ISSUE_APP_CLIENT_ID }}
+          ISSUE_APP_PRIVATE_KEY: ${{ secrets.DSH_ISSUE_APP_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "$ISSUE_APP_CLIENT_ID" ] && [ -n "$ISSUE_APP_PRIVATE_KEY" ]; then
+            echo 'available=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+          fi
       - name: Create project token
         id: app-token
-        if: ${{ steps.config.outputs.enabled == 'true' && (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested') && vars.DSH_ISSUE_APP_CLIENT_ID != '' && secrets.DSH_ISSUE_APP_PRIVATE_KEY != '' }}
+        if: ${{ steps.config.outputs.enabled == 'true' && steps.credentials.outputs.available == 'true' && (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested') }}
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
         with:
           client-id: ${{ vars.DSH_ISSUE_APP_CLIENT_ID }}
@@ -66,7 +79,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
       - name: Handle repository event
-        if: ${{ steps.config.outputs.enabled == 'true' && (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested') && steps.app-token.outputs.token != '' }}
+        if: ${{ steps.config.outputs.enabled == 'true' && steps.credentials.outputs.available == 'true' && (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested') && steps.app-token.outputs.token != '' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: node .github/issue-management/policy.mjs lifecycle
@@ -74,5 +87,5 @@ jobs:
         if: ${{ steps.config.outputs.enabled != 'true' }}
         run: echo "No issue-lifecycle configuration is enabled for $GITHUB_REPOSITORY."
       - name: Skip lifecycle without project credentials
-        if: ${{ steps.config.outputs.enabled == 'true' && steps.app-token.outputs.token == '' }}
+        if: ${{ steps.config.outputs.enabled == 'true' && steps.credentials.outputs.available != 'true' }}
         run: echo "Issue lifecycle is configured, but its GitHub App credentials are unavailable; no project mutation was attempted."
