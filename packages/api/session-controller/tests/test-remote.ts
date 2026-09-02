@@ -18,7 +18,10 @@ import {
   remoteErrorOf,
   type RemoteResult,
 } from '@deepseek-ai/dsh-typert-protocol'
-import SessionController from '../src/index.ts'
+import SessionController, {
+  type SessionStopJobRequest,
+  type SessionStopJobValue,
+} from '../src/index.ts'
 import type {
   ModelCatalog,
   SessionAttachmentRequest,
@@ -64,6 +67,7 @@ export interface TestSessionRemote {
   attachment(request: SessionAttachmentRequest): Promise<RemoteResult<SessionAttachmentValue>>
   updateQueue(request: SessionUpdateQueueRequest): Promise<RemoteResult<SessionUpdateQueueValue>>
   cancel(request: SessionCancelRequest): Promise<RemoteResult<SessionCancelValue>>
+  stopJob(request: SessionStopJobRequest): Promise<RemoteResult<SessionStopJobValue>>
   openWorkspacePath(
     request: SessionOpenWorkspacePathRequest,
     signal?: AbortSignal,
@@ -263,6 +267,7 @@ export function createSessionTestRemote(
     attachment: request => remoteResult(() => direct.attachment(request)),
     updateQueue: request => remoteResult(() => direct.updateQueue(request)),
     cancel: request => remoteResult(() => direct.cancel(request)),
+    stopJob: request => remoteResult(() => direct.stopJob(request)),
     openWorkspacePath: (request, signal = new AbortController().signal) => remoteResult(
       () => direct.openWorkspacePath(request, signal),
       signal,
