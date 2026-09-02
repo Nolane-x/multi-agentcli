@@ -21,6 +21,7 @@ import { ApiSessionList, DEFAULT_COLD_BLANK_PROBE_MAX_BYTES } from './list.ts'
 import { buildModelCatalog } from './catalog.ts'
 import { installModelSelectionProjection } from './model-selection-projection.ts'
 import { SessionSkillCatalog } from './skill-catalog.ts'
+import { TerminalControlController } from './terminal-control.ts'
 import type {
   ModelCatalog,
   SessionAttachmentRequest,
@@ -55,14 +56,18 @@ import type {
 } from './types.ts'
 
 export type * from './types.ts'
+export type * from './terminal-types.ts'
 export { ApiSessionNotFound } from './agent.ts'
 export { SessionFileReferences } from './file-references.ts'
 export { SessionSkillCatalog } from './skill-catalog.ts'
+export { TerminalControlController } from './terminal-control.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Host Session business API and Remote namespace owner. */
     sessionController: SessionController
+    /** Dedicated owner-scoped PTY Remote namespace owner. */
+    terminalControlController: TerminalControlController
   }
 }
 
@@ -135,6 +140,7 @@ export class SessionController extends TypertRemoteService {
       ?? (() => config.nativeOpen ?? (internals.openPath !== undefined || canOpenNativePath()))
     ctx.plugin(SessionFileReferences)
     ctx.plugin(SessionSkillCatalog)
+    ctx.plugin(TerminalControlController)
 
     ctx.on('session/created', (session) => {
       ctx.emit('api-session/added', this.listState.summaryFor(session))
