@@ -11,6 +11,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionIdOf } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
+import type { ReactNode } from 'react'
 import type { PanelActions } from './service.ts'
 import { AppFrame } from './AppFrame.tsx'
 import { createLayoutStore } from './stores.ts'
@@ -68,8 +69,8 @@ interface SessionScopeComponent {
   (props: {
     scope: 'session' | 'session-maybe'
     scopeKey?: string
-    children: React.ReactNode
-  }): React.ReactNode
+    children: ReactNode
+  }): ReactNode
 }
 
 /** Services required. Session navigation/runtime and the renderer scope share one domain capability. */
