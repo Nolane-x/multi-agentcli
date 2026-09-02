@@ -70,7 +70,7 @@ describe('TerminalSessionService raw output', () => {
     const dispose = terminals.subscribeOutput(owner, created.sessionId, data => { received.push(data) })
     for (const listener of listeners) listener('\u001b[2Jλ\r\n')
     expect(received).toEqual(['\u001b[2Jλ\r\n'])
-    expect(() => terminals.subscribeOutput(foreign, created.sessionId, () => {})).toThrowErrorMatchingObject({ code: 'FOREIGN_SESSION' })
+    expect(() => terminals.subscribeOutput(foreign, created.sessionId, () => {})).toThrowMatchingObject({ code: 'FOREIGN_SESSION' })
 
     dispose()
     dispose()
@@ -94,6 +94,6 @@ describe('TerminalSessionService raw output', () => {
     const created = await ctx.terminals.spawn(owner, { type: 'stub' })
     const terminals = ctx.terminals as unknown as RawOutputService
 
-    expect(() => terminals.subscribeOutput(owner, created.sessionId, () => {})).toThrowErrorMatchingObject({ code: 'OUTPUT_UNSUPPORTED' })
+    expect(() => terminals.subscribeOutput(owner, created.sessionId, () => {})).toThrowMatchingObject({ code: 'OUTPUT_UNSUPPORTED' })
   })
 })
