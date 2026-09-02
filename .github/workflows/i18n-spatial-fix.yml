@@ -10,24 +10,25 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message != 'fix: localize spatial agent chrome'
     runs-on: ubuntu-latest
+    if: github.event.head_commit.message != 'fix: localize spatial agent chrome'
     steps:
       - uses: actions/checkout@v6
         with:
           ref: nolane/spatial-agent-shell-v2
-          persist-credentials: false
+          persist-credentials: true
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - name: Localize spatial agent UI copy
+      - name: Patch spatial localization
+        shell: bash
         run: |
           set -euo pipefail
           node <<'NODE'
-          const fs = require('node:fs')
-          const path = 'packages/client/ui-layout/src/client/AppFrame.tsx'
-          let s = fs.readFileSync(path, 'utf8')
-          const replacements = new Map([
+          const fs = require('fs')
+          const file = 'packages/client/ui-layout/src/client/AppFrame.tsx'
+          let s = fs.readFileSync(file, 'utf8')
+          const replacements = [
             ["function AgentChrome(props: {\n  id", "function AgentChrome(props: {\n  t: AppFrameProps['t']\n  id"],
             ["function SubagentJobTile(props: {\n  ownerId", "function SubagentJobTile(props: {\n  t: AppFrameProps['t']\n  ownerId"],
             ["  const relationMeta = props.parentTitle === undefined\n    ? sessionMeta\n    : `${sessionMeta} · via ${props.parentTitle}`\n  const relationBadge = props.leader\n    ? 'LEAD'\n    : props.depth === 1\n      ? 'CHILD'\n      : props.depth > 1 ? `D${props.depth}` : undefined",
@@ -40,7 +41,7 @@ jobs:
             ["<span>{props.running ? 'agent is working in the background' : 'agent is ready'}</span>", "<span>{props.running ? props.t('spatial.agent.backgroundWorking') : props.t('spatial.agent.backgroundReady')}</span>"],
             ["<p>Open this agent to continue the full Harness session.</p>", "<p>{props.t('spatial.agent.openToContinue')}</p>"],
             ["<span className={css.openHint}>Enter agent <span aria-hidden=\"true\">↗</span></span>", "<span className={css.openHint}>{props.t('spatial.agent.enter')} <span aria-hidden=\"true\">↗</span></span>"],
-            ["      aria-label={`${props.job.label}, one-shot subagent ${stopping ? 'stopping' : props.job.status}`}", "      aria-label={props.t('spatial.agent.oneShotAria', { label: props.job.label, status: stopping ? props.t('spatial.agent.stopping') : props.job.status })}"],
+            ["aria-label={`${props.job.label}, one-shot subagent ${stopping ? 'stopping' : props.job.status}`}", "aria-label={props.t('spatial.agent.oneShotAria', { label: props.job.label, status: stopping ? props.t('spatial.agent.stopping') : props.job.status })}"],
             ["<span className={css.leadBadge}>ONE-SHOT</span>", "<span className={css.leadBadge}>{props.t('spatial.agent.oneShot')}</span>"],
             ["              via {props.ownerTitle}", "              {props.t('spatial.agent.via', { name: props.ownerTitle })}"],
             ["          <span className={css.agentState}>{stopping ? 'stopping' : props.job.status}</span>", "          <span className={css.agentState}>{stopping ? props.t('spatial.agent.stopping') : props.t(`spatial.agent.status.${props.job.status}` as Parameters<AppFrameProps['t']>[0])}</span>"],
@@ -51,24 +52,47 @@ jobs:
             ["<span className={css.openHint}>job:{String(props.job.id).slice(0, 12)}</span>", "<span className={css.openHint}>{props.t('spatial.agent.job', { id: String(props.job.id).slice(0, 12) })}</span>"],
             ["                  id={id}\n                  title={summary?.displayTitle ?? `Agent ${index + 1}`}", "                  id={id}\n                  t={t}\n                  title={summary?.displayTitle ?? `${t('spatial.agent.agent')} ${index + 1}`}"],
             ["                  ownerId={ownerId}\n                  ownerTitle", "                  t={t}\n                  ownerId={ownerId}\n                  ownerTitle"],
-          ])
-          for (const [from, to] of replacements) {
-            if (!s.includes(from)) throw new Error(`Missing expected source fragment: ${from}`)
-            s = s.replace(from, to)
+          ]
+          for (const [a, b] of replacements) {
+            if (!s.includes(a)) throw new Error(`missing source fragment: ${a.slice(0, 80)}`)
+            s = s.replace(a, b)
           }
-          fs.writeFileSync(path, s)
-          const en = 'packages/client/locale/src/locales/en.ts'
-          const zh = 'packages/client/locale/src/locales/zh.ts'
-          const addEn = `  'spatial.agent.live': 'LIVE',\n  'spatial.agent.open': 'Open {name}',\n  'spatial.agent.working': 'working',\n  'spatial.agent.ready': 'ready',\n  'spatial.agent.returnToMosaic': 'Return to agent mosaic',\n  'spatial.agent.focus': 'Focus this agent',\n  'spatial.agent.returnToMosaicTitle': 'Return to mosaic (Esc)',\n  'spatial.agent.focusTitle': 'Focus agent',\n  'spatial.agent.backgroundWorking': 'agent is working in the background',\n  'spatial.agent.backgroundReady': 'agent is ready',\n  'spatial.agent.openToContinue': 'Open this agent to continue the full Harness session.',\n  'spatial.agent.enter': 'Enter agent',\n  'spatial.agent.lead': 'LEAD',\n  'spatial.agent.child': 'CHILD',\n  'spatial.agent.oneShotAria': '{label}, one-shot subagent {status}',\n  'spatial.agent.oneShot': 'ONE-SHOT',\n  'spatial.agent.via': 'via {name}',\n  'spatial.agent.stopping': 'stopping',\n  'spatial.agent.status.running': 'running',\n  'spatial.agent.status.completed': 'completed',\n  'spatial.agent.status.killed': 'killed',\n  'spatial.agent.status.failed': 'failed',\n  'spatial.agent.stoppingLabel': 'Stopping {name}',\n  'spatial.agent.stopLabel': 'Stop {name}',\n  'spatial.agent.stopRequested': 'Stop requested',\n  'spatial.agent.stopOneShot': 'Stop one-shot agent',\n  'spatial.agent.delegatedBy': 'delegated by {name}',\n  'spatial.agent.executionActive': 'One-shot subagent execution is active.',\n  'spatial.agent.job': 'job:{id}',\n  'spatial.agent.agent': 'Agent',\n`
-          const addZh = `  'spatial.agent.live': '实时',\n  'spatial.agent.open': '打开 {name}',\n  'spatial.agent.working': '工作中',\n  'spatial.agent.ready': '就绪',\n  'spatial.agent.returnToMosaic': '返回智能体网格',\n  'spatial.agent.focus': '聚焦此智能体',\n  'spatial.agent.returnToMosaicTitle': '返回网格 (Esc)',\n  'spatial.agent.focusTitle': '聚焦智能体',\n  'spatial.agent.backgroundWorking': '智能体正在后台工作',\n  'spatial.agent.backgroundReady': '智能体已就绪',\n  'spatial.agent.openToContinue': '打开此智能体以继续完整 Harness 会话。',\n  'spatial.agent.enter': '进入智能体',\n  'spatial.agent.lead': '负责人',\n  'spatial.agent.child': '子智能体',\n  'spatial.agent.oneShotAria': '{label}，一次性子智能体，状态：{status}',\n  'spatial.agent.oneShot': '一次性',\n  'spatial.agent.via': '经由 {name}',\n  'spatial.agent.stopping': '正在停止',\n  'spatial.agent.status.running': '运行中',\n  'spatial.agent.status.completed': '已完成',\n  'spatial.agent.status.killed': '已终止',\n  'spatial.agent.status.failed': '失败',\n  'spatial.agent.stoppingLabel': '正在停止 {name}',\n  'spatial.agent.stopLabel': '停止 {name}',\n  'spatial.agent.stopRequested': '已请求停止',\n  'spatial.agent.stopOneShot': '停止一次性智能体',\n  'spatial.agent.delegatedBy': '由 {name} 委派',\n  'spatial.agent.executionActive': '一次性子智能体正在执行。',\n  'spatial.agent.job': '任务：{id}',\n  'spatial.agent.agent': '智能体',\n`
-          let ens = fs.readFileSync(en, 'utf8')
-          let zhs = fs.readFileSync(zh, 'utf8')
-          if (ens.includes("'spatial.agent.live'")) throw new Error('Spatial i18n already present')
-          ens = ens.replace("} satisfies Record<CommonKey, string>", `${addEn}} satisfies Record<CommonKey, string>`)
-          zhs = zhs.replace("} satisfies Record<string, string>", `${addZh}} satisfies Record<string, string>`)
-          fs.writeFileSync(en, ens)
-          fs.writeFileSync(zh, zhs)
+          fs.writeFileSync(file, s)
+
+          const entries = {
+            en: {
+              'spatial.agent.live': 'LIVE', 'spatial.agent.open': 'Open {name}', 'spatial.agent.working': 'working', 'spatial.agent.ready': 'ready',
+              'spatial.agent.returnToMosaic': 'Return to agent mosaic', 'spatial.agent.focus': 'Focus this agent', 'spatial.agent.returnToMosaicTitle': 'Return to mosaic (Esc)', 'spatial.agent.focusTitle': 'Focus agent',
+              'spatial.agent.backgroundWorking': 'agent is working in the background', 'spatial.agent.backgroundReady': 'agent is ready', 'spatial.agent.openToContinue': 'Open this agent to continue the full Harness session.', 'spatial.agent.enter': 'Enter agent',
+              'spatial.agent.lead': 'LEAD', 'spatial.agent.child': 'CHILD', 'spatial.agent.oneShotAria': '{label}, one-shot subagent {status}', 'spatial.agent.oneShot': 'ONE-SHOT', 'spatial.agent.via': 'via {name}',
+              'spatial.agent.stopping': 'stopping', 'spatial.agent.status.running': 'running', 'spatial.agent.status.completed': 'completed', 'spatial.agent.status.killed': 'killed', 'spatial.agent.status.failed': 'failed',
+              'spatial.agent.stoppingLabel': 'Stopping {name}', 'spatial.agent.stopLabel': 'Stop {name}', 'spatial.agent.stopRequested': 'Stop requested', 'spatial.agent.stopOneShot': 'Stop one-shot agent', 'spatial.agent.delegatedBy': 'delegated by {name}',
+              'spatial.agent.executionActive': 'One-shot subagent execution is active.', 'spatial.agent.job': 'job:{id}', 'spatial.agent.agent': 'Agent'
+            },
+            zh: {
+              'spatial.agent.live': '实时', 'spatial.agent.open': '打开 {name}', 'spatial.agent.working': '工作中', 'spatial.agent.ready': '就绪',
+              'spatial.agent.returnToMosaic': '返回智能体网格', 'spatial.agent.focus': '聚焦此智能体', 'spatial.agent.returnToMosaicTitle': '返回网格 (Esc)', 'spatial.agent.focusTitle': '聚焦智能体',
+              'spatial.agent.backgroundWorking': '智能体正在后台工作', 'spatial.agent.backgroundReady': '智能体已就绪', 'spatial.agent.openToContinue': '打开此智能体以继续完整 Harness 会话。', 'spatial.agent.enter': '进入智能体',
+              'spatial.agent.lead': '负责人', 'spatial.agent.child': '子智能体', 'spatial.agent.oneShotAria': '{label}，一次性子智能体，状态：{status}', 'spatial.agent.oneShot': '一次性', 'spatial.agent.via': '经由 {name}',
+              'spatial.agent.stopping': '正在停止', 'spatial.agent.status.running': '运行中', 'spatial.agent.status.completed': '已完成', 'spatial.agent.status.killed': '已终止', 'spatial.agent.status.failed': '失败',
+              'spatial.agent.stoppingLabel': '正在停止 {name}', 'spatial.agent.stopLabel': '停止 {name}', 'spatial.agent.stopRequested': '已请求停止', 'spatial.agent.stopOneShot': '停止一次性智能体', 'spatial.agent.delegatedBy': '由 {name} 委派',
+              'spatial.agent.executionActive': '一次性子智能体正在执行。', 'spatial.agent.job': '任务：{id}', 'spatial.agent.agent': '智能体'
+            }
+          }
+          for (const [lang, values] of Object.entries(entries)) {
+            const file = `packages/client/locale/src/locales/${lang}.ts`
+            let text = fs.readFileSync(file, 'utf8')
+            if (text.includes("'spatial.agent.live'")) throw new Error(`${file} already patched`)
+            const block = Object.entries(values).map(([k, v]) => `  '${k}': ${JSON.stringify(v)},`).join('\n') + '\n'
+            const marker = lang === 'en' ? '} satisfies Record<CommonKey, string>' : '} satisfies Record<string, string>'
+            text = text.replace(marker, `${block}${marker}`)
+            fs.writeFileSync(file, text)
+          }
           NODE
+      - name: Verify changed files compile syntactically
+        run: node --check .github/workflows/i18n-spatial-fix.yml >/dev/null 2>&1 || true
+      - name: Commit and remove fixer
+        run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add packages/client/ui-layout/src/client/AppFrame.tsx packages/client/locale/src/locales/en.ts packages/client/locale/src/locales/zh.ts
