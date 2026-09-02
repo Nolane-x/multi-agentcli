@@ -40,6 +40,8 @@ interface SpatialAgentActions {
   openAgent?: (sessionId: SessionIdOf) => void
   /** Open a Session's resident history/follow source without changing selection. */
   stageAgent?: (sessionId: SessionIdOf) => void
+  /** Request cancellation of an owner-fenced one-shot background job. */
+  stopAgentJob?: (ownerId: SessionIdOf, jobId: string) => Promise<boolean>
 }
 
 /** Full composed props: runtime share + child-slot render share + store share. */
@@ -198,9 +200,12 @@ function SubagentJobTile(props: {
     readonly status: 'running' | 'stopping' | 'completed' | 'killed' | 'failed'
     readonly detail?: string
   }
+  stopRequested: boolean
+  onStop?: () => void
   style?: CSSProperties
 }) {
   const active = props.job.status === 'running' || props.job.status === 'stopping'
+  const stopping = props.stopRequested || props.job.status === 'stopping'
   return (
     <section
       className={css.agentTile}
@@ -208,7 +213,8 @@ function SubagentJobTile(props: {
       data-agent-job-id={props.job.id}
       data-agent-owner-id={props.ownerId}
       data-agent-running={active || undefined}
-      aria-label={`${props.job.label}, one-shot subagent ${props.job.status}`}
+      data-agent-stop-requested={props.stopRequested || undefined}
+      aria-label={`${props.job.label}, one-shot subagent ${stopping ? 'stopping' : props.job.status}`}
     >
       <header className={css.agentHeader}>
         <div className={css.agentIdentity}>
@@ -224,7 +230,19 @@ function SubagentJobTile(props: {
           </span>
         </div>
         <div className={css.agentHeaderActions}>
-          <span className={css.agentState}>{props.job.status}</span>
+          <span className={css.agentState}>{stopping ? 'stopping' : props.job.status}</span>
+          {props.job.status === 'running' && props.onStop !== undefined && (
+            <button
+              type="button"
+              className={css.focusButton}
+              aria-label={props.stopRequested ? `Stopping ${props.job.label}` : `Stop ${props.job.label}`}
+              title={props.stopRequested ? 'Stop requested' : 'Stop one-shot agent'}
+              disabled={props.stopRequested}
+              onClick={props.onStop}
+            >
+              <span aria-hidden="true">{props.stopRequested ? '…' : '■'}</span>
+            </button>
+          )}
         </div>
       </header>
       <div className={css.agentBody}>
@@ -301,6 +319,7 @@ export function AppFrame({
   SessionScope,
   openAgent,
   stageAgent,
+  stopAgentJob,
   t,
 }: AppFrameProps) {
   const panels = useStore(s => s)
@@ -329,12 +348,56 @@ export function AppFrame({
     [activeAgentIds, jobsBySession],
   )
   const [focusedAgent, setFocusedAgent] = useState<SessionIdOf | undefined>()
+  const [stopRequestedJobs, setStopRequestedJobs] = useState<Set<string>>(() => new Set())
   const focusedVisible = focusedAgent !== undefined && activeAgentIds.includes(focusedAgent)
   const displayedAgentIds = focusedVisible ? [focusedAgent] : activeAgentIds
   const displayedSubagentJobs = focusedVisible ? [] : activeSubagentJobs
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
   const stagedAgents = useRef(new Set<SessionIdOf>())
+
+  const requestJobStop = useCallback((ownerId: SessionIdOf, jobId: string) => {
+    if (stopAgentJob === undefined) return
+    setStopRequestedJobs((previous) => {
+      if (previous.has(jobId)) return previous
+      const next = new Set(previous)
+      next.add(jobId)
+      return next
+    })
+    void stopAgentJob(ownerId, jobId).then(
+      (accepted) => {
+        if (accepted) return
+        setStopRequestedJobs((previous) => {
+          if (!previous.has(jobId)) return previous
+          const next = new Set(previous)
+          next.delete(jobId)
+          return next
+        })
+      },
+      () => {
+        setStopRequestedJobs((previous) => {
+          if (!previous.has(jobId)) return previous
+          const next = new Set(previous)
+          next.delete(jobId)
+          return next
+        })
+      },
+    )
+  }, [stopAgentJob])
+
+  // Drop optimistic stop state as soon as a job leaves the active projection.
+  useEffect(() => {
+    const active = new Set(activeSubagentJobs.map(({ job }) => String(job.id)))
+    setStopRequestedJobs((previous) => {
+      let changed = false
+      const next = new Set<string>()
+      for (const id of previous) {
+        if (active.has(id)) next.add(id)
+        else changed = true
+      }
+      return changed ? next : previous
+    })
+  }, [activeSubagentJobs])
 
   // Open each visible Session agent's resident event source once, without
   // changing global selection. One-shot job cards are deliberately excluded:
@@ -500,15 +563,23 @@ export function AppFrame({
                 </AgentChrome>
               )
             })}
-            {displayedSubagentJobs.map(({ ownerId, job }) => (
-              <SubagentJobTile
-                key={`job:${String(job.id)}`}
-                ownerId={ownerId}
-                ownerTitle={sessionsById[ownerId]?.displayTitle ?? String(ownerId)}
-                job={job}
-                style={tileStyle}
-              />
-            ))}
+            {displayedSubagentJobs.map(({ ownerId, job }) => {
+              const jobId = String(job.id)
+              const requested = stopRequestedJobs.has(jobId)
+              return (
+                <SubagentJobTile
+                  key={`job:${jobId}`}
+                  ownerId={ownerId}
+                  ownerTitle={sessionsById[ownerId]?.displayTitle ?? String(ownerId)}
+                  job={job}
+                  stopRequested={requested}
+                  {...stopAgentJob === undefined ? {} : {
+                    onStop: () => { requestJobStop(ownerId, jobId) },
+                  }}
+                  style={tileStyle}
+                />
+              )
+            })}
           </div>
         )}
       </CenterColumn>
