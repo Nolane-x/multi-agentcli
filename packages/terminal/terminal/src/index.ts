@@ -58,6 +58,7 @@ export type TerminalErrorCode =
   | 'FOREIGN_SESSION'
   | 'NO_BACKEND'
   | 'NO_SESSION'
+  | 'OUTPUT_UNSUPPORTED'
   | 'OWNER_NOT_LIVE'
   | 'RESIZE_UNSUPPORTED'
   | 'SEND_ACTIVE'
@@ -264,6 +265,23 @@ export class TerminalSessionService extends Service {
    */
   read(owner: Agent, id: TerminalSessionId, request: TerminalReadRequest = {}): TerminalReadResult {
     return this.expectOwned(owner, id).session.read(request)
+  }
+
+  /**
+   * Subscribe to exact decoded PTY output before sanitizer/render transforms.
+   * @param owner - exact session owner.
+   * @param id - target PTY identity.
+   * @param listener - synchronous consumer of ANSI/control-preserving output chunks.
+   * @returns idempotent subscription disposer.
+   */
+  subscribeOutput(owner: Agent, id: TerminalSessionId, listener: (data: string) => void): () => void {
+    const record = this.expectOwned(owner, id)
+    if (record.closing !== undefined) throw new Error(`PTY session ${id} is closing`)
+    const subscribe = record.session.subscribeOutput
+    if (subscribe === undefined) {
+      throw new TerminalError(`PTY backend "${record.type}" does not support raw output`, 'OUTPUT_UNSUPPORTED')
+    }
+    return subscribe.call(record.session, listener)
   }
 
   /**
