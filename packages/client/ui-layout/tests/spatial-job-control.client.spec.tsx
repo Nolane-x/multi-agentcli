@@ -60,8 +60,8 @@ describe('spatial one-shot agent control', () => {
       currentAddress: undefined,
     }
     const stopAgentJob = vi.fn(() => Promise.resolve(true))
-    const openAgent = vi.fn()
-    const stageAgent = vi.fn()
+    const openAgent = vi.fn<NonNullable<AppFrameProps['openAgent']>>()
+    const stageAgent = vi.fn<NonNullable<AppFrameProps['stageAgent']>>()
     const renderSlot = vi.fn((key: string) => (
       key === 'conversation' ? <div>conversation</div> : null
     )) as unknown as AppFrameProps['renderSlot']
@@ -79,12 +79,12 @@ describe('spatial one-shot agent control', () => {
         actions={store.actions}
         renderSlot={renderSlot}
         useSessions={((selector: (value: SessionListState) => unknown) => selector(state)) as never}
-        useSessionPendingInteraction={((selector: (value: Map<never, never>) => unknown) => selector(new Map())) as never}
+        useSessionPendingInteraction={((selector: (value: Map<never, never>) => unknown) => selector(new Map<never, never>())) as never}
         useWorkspaces={(() => undefined) as never}
         SessionProvider={SessionProvider}
         SessionScope={SessionScope}
-        openAgent={openAgent as AppFrameProps['openAgent']}
-        stageAgent={stageAgent as AppFrameProps['stageAgent']}
+        openAgent={openAgent}
+        stageAgent={stageAgent}
         stopAgentJob={stopAgentJob}
         t={key => key}
       />,
@@ -97,7 +97,8 @@ describe('spatial one-shot agent control', () => {
     expect(openAgent).not.toHaveBeenCalled()
     expect(stopAgentJob).toHaveBeenCalledWith(root, 'subagent-1')
     await waitFor(() => {
-      expect(within(jobTile).getByRole('button', { name: 'Stopping Audit branch' })).toBeDisabled()
+      const stopping = within(jobTile).getByRole('button', { name: 'Stopping Audit branch' }) as HTMLButtonElement
+      expect(stopping.disabled).toBe(true)
     })
   })
 })

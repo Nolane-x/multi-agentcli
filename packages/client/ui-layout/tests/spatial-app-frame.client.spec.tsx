@@ -51,8 +51,8 @@ function mountSpatialFrame(
 ) {
   const store = createLayoutStore().create()
   const state = stateOverride ?? sessionState(count, jobsBySession)
-  const openAgent = vi.fn()
-  const stageAgent = vi.fn()
+  const openAgent = vi.fn<NonNullable<AppFrameProps['openAgent']>>()
+  const stageAgent = vi.fn<NonNullable<AppFrameProps['stageAgent']>>()
   const renderSlot = vi.fn((key: string) => {
     if (key === 'conversation') return <div data-testid="conversation">conversation</div>
     if (key === 'sidebar') return <div data-testid="rail">rail</div>
@@ -72,12 +72,12 @@ function mountSpatialFrame(
       actions={store.actions}
       renderSlot={renderSlot}
       useSessions={useSessions}
-      useSessionPendingInteraction={((selector: (value: Map<never, never>) => unknown) => selector(new Map())) as never}
+      useSessionPendingInteraction={((selector: (value: Map<never, never>) => unknown) => selector(new Map<never, never>())) as never}
       useWorkspaces={(() => undefined) as never}
       SessionProvider={SessionProvider}
       SessionScope={SessionScope}
-      openAgent={openAgent as AppFrameProps['openAgent']}
-      stageAgent={stageAgent as AppFrameProps['stageAgent']}
+      openAgent={openAgent}
+      stageAgent={stageAgent}
       t={key => key}
     />,
   )
