@@ -180,6 +180,8 @@ export class LocalPtySession implements TerminalBackendSession {
   private activeAbort: (() => void) | undefined
   private interrupting: LocalSendOperation | undefined
   private activeWrite: Promise<boolean> | undefined
+  private rawWriteTail = Promise.resolve()
+  private rawWritesPending = 0
   private pollingReady: LocalSendOperation | undefined
   private polling = false
   private promptSeen = false
@@ -251,12 +253,14 @@ export class LocalPtySession implements TerminalBackendSession {
   startSend(request: TerminalSendRequest): TerminalSendOperation {
     if (this.closing) throw new Error('PTY session is closing')
     if (this.statusValue.kind === 'exited') throw new Error('PTY session has exited')
-    if (this.active !== undefined) {
+    if (this.active !== undefined || this.rawWritesPending > 0) {
       const draining = this.activeWrite !== undefined
         ? ' or draining provider write'
         : this.interrupting !== undefined
           ? ' or draining foreground interrupt'
-          : ''
+          : this.rawWritesPending > 0
+            ? ' or draining raw input'
+            : ''
       throw new TerminalError(`PTY session already has an active send${draining}`, 'SEND_ACTIVE')
     }
     if (request.signal?.aborted === true) throw new Error('PTY send aborted before write')
@@ -371,6 +375,26 @@ export class LocalPtySession implements TerminalBackendSession {
       lineBegin: offset,
       lineEnd: offset + returnedLines,
       truncated: snapshot.truncated || bounded.truncated,
+    }
+  }
+
+  async write(data: string): Promise<void> {
+    if (this.closing) throw new Error('PTY session is closing')
+    if (this.statusValue.kind === 'exited') throw new Error('PTY session has exited')
+    if (this.active !== undefined) throw new TerminalError('PTY session has an active model send', 'SEND_ACTIVE')
+    this.rawWritesPending += 1
+    const write = this.rawWriteTail.then(async () => {
+      if (this.closing) throw new Error('PTY session is closing')
+      if (this.statusValue.kind === 'exited') throw new Error('PTY session has exited')
+      if (this.protocolWorkPending()) await this.drainTerminalProtocol()
+      this.resetReadinessEvidence()
+      await this.terminal.write(data)
+    })
+    this.rawWriteTail = write.catch(() => {})
+    try {
+      await write
+    } finally {
+      this.rawWritesPending -= 1
     }
   }
 
