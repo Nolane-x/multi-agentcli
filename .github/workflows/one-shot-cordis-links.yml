@@ -25,31 +25,42 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - name: Add canonical documentation ownership for new service signature types
+      - name: Complete Cordis service graph ownership
         shell: bash
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile
           python - <<'PY'
           from pathlib import Path
+
           p = Path('scripts/gen-cordis-catalog.ts')
           s = p.read_text()
-
           service_marker = "  terminals: 'terminal.md',\n"
           if "  terminalControlController: 'terminal.md'," not in s:
               if service_marker not in s:
                   raise SystemExit('SERVICE_PAGE terminal marker not found')
               s = s.replace(service_marker, service_marker + "  terminalControlController: 'terminal.md',\n", 1)
-
-          marker = "\n}\n\n/** TypeScript lib and pinned framework types with no repository-owned data page. */"
-          if marker not in s:
-              raise SystemExit('LINK_MAP closing marker not found')
+          link_marker = "\n}\n\n/** TypeScript lib and pinned framework types with no repository-owned data page. */"
           entries = """\n  SessionStopJobRequest: 'jobs.md',\n  SessionStopJobValue: 'jobs.md',\n  TerminalBackendsValue: 'terminal.md',\n  TerminalListRequest: 'terminal.md',\n  TerminalListValue: 'terminal.md',\n  TerminalOpenRequest: 'terminal.md',\n  TerminalOpenValue: 'terminal.md',\n  TerminalWriteRequest: 'terminal.md',\n  TerminalResizeRequest: 'terminal.md',\n  TerminalSignalRequest: 'terminal.md',\n  TerminalSignalValue: 'terminal.md',\n  TerminalAddressRequest: 'terminal.md',\n  TerminalCloseValue: 'terminal.md',\n  TerminalOutputFrame: 'terminal.md',\n"""
+          if link_marker not in s:
+              raise SystemExit('LINK_MAP closing marker not found')
           if '  SessionStopJobRequest: \'jobs.md\',' not in s:
-              s = s.replace(marker, entries + marker, 1)
+              s = s.replace(link_marker, entries + link_marker, 1)
+          p.write_text(s)
+
+          # gen-doc-graphs maintains a deliberately fail-closed service-role table.
+          p = Path('scripts/gen-doc-graphs.ts')
+          s = p.read_text()
+          role_marker = "  {\n    key: 'terminals',\n    pkg: 'terminal',\n    title: 'Persistent PTY session registry',\n    mode: 'seam',\n    implementations: ['terminal-bash'],\n    consumers: ['tool-terminal'],\n    note: 'The registry owns exact-Agent session identity and cleanup; backends own terminal mechanics, while tool-terminal exposes the owner-scoped model tools.',\n  },\n"
+          role = """  {\n    key: 'terminalControlController',\n    pkg: 'session-controller',\n    title: 'Owner-scoped terminal Remote controller',\n    mode: 'core',\n    consumers: ['client-ui-layout'],\n    note: 'Exposes the exact-Agent PTY control plane over the generated terminal Remote namespace without bypassing Session ownership or the resident terminal registry.',\n  },\n"""
+          if "key: 'terminalControlController'" not in s:
+              if role_marker not in s:
+                  raise SystemExit('terminals SERVICE_ROLES block not found')
+              s = s.replace(role_marker, role_marker + role, 1)
           p.write_text(s)
           PY
           pnpm run gen-cordis-catalog
+          pnpm run gen-doc-graphs
           pnpm run verify-doc-graphs
           pnpm run verify-type-equiv
           git status --short
@@ -57,5 +68,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
           git rm .github/workflows/one-shot-cordis-links.yml
-          git commit -m 'docs: register cordis signature type owners [cordis-ownership-done]'
+          git commit -m 'docs: register terminal Remote graph ownership [cordis-ownership-done]'
           git push origin HEAD:nolane/spatial-agent-shell-v2
