@@ -155,6 +155,11 @@ export interface TerminalBackendSession {
   /** Read one bounded page from retained scrollback. */
   read(request: TerminalReadRequest): TerminalReadResult
   /**
+   * Write exact terminal input bytes without line-oriented readiness semantics.
+   * Interactive UI consumers use this capability for keystrokes and control sequences.
+   */
+  write?(data: string): Promise<void>
+  /**
    * Resize the live terminal without restarting it when the backend supports responsive geometry.
    * Consumers that require TUI correctness must reject sessions without this capability.
    */
