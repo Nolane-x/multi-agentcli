@@ -63,21 +63,14 @@ export interface ConvOwnerProps {}
 /** Details owner share: sessionId arrives as a framework-standard prop. */
 export interface DetailsOwnerProps {}
 
-/** Required services. Session state and its Host control namespace stay separate capabilities. */
-export const inject = ['slots', 'theme', 'locale', 'sessions', 'remote.session']
+/** Required services. Session navigation and runtime control share one domain capability. */
+export const inject = ['slots', 'theme', 'locale', 'sessions']
 
-type SpatialRuntimeContext = ClientContext & {
+type SpatialSessionsContext = ClientContext & {
   sessions: {
     open: (sessionId: SessionIdOf) => void
     stage: (sessionId: SessionIdOf) => void
-  }
-  remote: {
-    session: {
-      stopJob: (request: { sessionId: SessionIdOf; jobId: string }) => Promise<
-        | { ok: true; value: { result: 'requested' | 'already-finished' } }
-        | { ok: false; error: unknown }
-      >
-    }
+    stopJob: (sessionId: SessionIdOf, jobId: string) => Promise<boolean>
   }
 }
 
@@ -89,9 +82,7 @@ export function apply(ctx: ClientContext): void {
   const layout = new LayoutController()
   ctx.effect(() => {
     const disposeService = ctx.reflect.provide('layout', layout)
-    const runtime = ctx as SpatialRuntimeContext
-    const sessionNavigation = runtime.sessions
-    const sessionControl = runtime.remote.session
+    const sessions = (ctx as SpatialSessionsContext).sessions
     const disposeRegistration = ctx.slots.register({
       name: 'root',
       locale: 'common',
@@ -111,19 +102,18 @@ export function apply(ctx: ClientContext): void {
           // Real navigation through the Session Controller. This is the same
           // authority used by upstream workspace/session UI, not DOM automation.
           openAgent: (sessionId: SessionIdOf) => {
-            sessionNavigation.open(sessionId)
+            sessions.open(sessionId)
           },
           // Public non-selecting Session Controller staging. The domain owns
           // history/follow idempotence and subagent-catalog refresh semantics.
           stageAgent: (sessionId: SessionIdOf) => {
-            sessionNavigation.stage(sessionId)
+            sessions.stage(sessionId)
           },
-          // One-shot work remains a JobRegistry concern. The UI receives only
-          // this boolean-admission wrapper over the owner-fenced Host Remote.
-          stopAgentJob: async (sessionId: SessionIdOf, jobId: string) => {
-            const result = await sessionControl.stopJob({ sessionId, jobId })
-            return result.ok
-          },
+          // Human control stays behind the Session domain; ui-layout never sees
+          // the generated Remote or JobRegistry service directly.
+          stopAgentJob: (sessionId: SessionIdOf, jobId: string) => (
+            sessions.stopJob(sessionId, jobId)
+          ),
         }
       },
     }, AppFrame)
