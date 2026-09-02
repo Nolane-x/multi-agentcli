@@ -36,11 +36,6 @@ concurrency:
 jobs:
   lifecycle:
     name: Issue lifecycle
-    # Runs on every pull_request_review event so the check reports success rather
-    # than a gray "skipped" segment. The token-creating and board-mutating steps
-    # are gated at step level (a skipped step does not gray the job): only a
-    # changes_requested review drives the Project board; approved/commented
-    # reviews never mint a write-capable App token.
     runs-on: ubuntu-latest
     steps:
       - name: Check out trusted policy
@@ -48,17 +43,36 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
+      - name: Detect repository configuration
+        id: config
+        shell: bash
+        run: |
+          set -euo pipefail
+          configured_repository=$(node -e "const c=require('./.github/issue-management/config.json'); process.stdout.write(c.organization + '/' + c.repository)")
+          if [ "$configured_repository" = "$GITHUB_REPOSITORY" ]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+            echo "Issue lifecycle is configured for $GITHUB_REPOSITORY."
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo "Issue lifecycle not configured for $GITHUB_REPOSITORY; trusted configuration targets $configured_repository. Passing without applying upstream lifecycle automation."
+          fi
       - name: Create project token
         id: app-token
-        if: ${{ github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested' }}
+        if: ${{ steps.config.outputs.enabled == 'true' && (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested') && vars.DSH_ISSUE_APP_CLIENT_ID != '' && secrets.DSH_ISSUE_APP_PRIVATE_KEY != '' }}
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
         with:
           client-id: ${{ vars.DSH_ISSUE_APP_CLIENT_ID }}
           private-key: ${{ secrets.DSH_ISSUE_APP_PRIVATE_KEY }}
-          owner: deepseek-harness
-          repositories: deepseek-harness
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
       - name: Handle repository event
-        if: ${{ github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested' }}
+        if: ${{ steps.config.outputs.enabled == 'true' && (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested') && steps.app-token.outputs.token != '' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: node .github/issue-management/policy.mjs lifecycle
+      - name: Skip unconfigured lifecycle
+        if: ${{ steps.config.outputs.enabled != 'true' }}
+        run: echo "No issue-lifecycle configuration is enabled for $GITHUB_REPOSITORY."
+      - name: Skip lifecycle without project credentials
+        if: ${{ steps.config.outputs.enabled == 'true' && steps.app-token.outputs.token == '' }}
+        run: echo "Issue lifecycle is configured, but its GitHub App credentials are unavailable; no project mutation was attempted."
