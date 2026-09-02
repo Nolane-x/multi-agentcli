@@ -61,13 +61,20 @@ export class TerminalControlController extends TypertRemoteService {
     super(ctx, 'terminalControlController', { namespace: 'terminal' })
   }
 
-  /** List PTY backend types available on this Host. */
+  /**
+   * List PTY backend types available on this Host.
+   * @returns the registered backend type names.
+   */
   @Remote
   backends(): TerminalBackendsValue {
     return { items: [...this.registry().listBackends()] }
   }
 
-  /** List published PTYs owned by the exact live Agent for one Session. */
+  /**
+   * List published PTYs owned by the exact live Agent for one Session.
+   * @param request - Session identity whose exact live Agent owns the terminals.
+   * @returns the owner-visible terminal collection.
+   */
   @Remote('list')
   list(request: TerminalListRequest): TerminalListValue {
     const owner = this.owner(request.sessionId)
@@ -76,7 +83,12 @@ export class TerminalControlController extends TypertRemoteService {
     }))
   }
 
-  /** Create and publish one PTY under the exact live Agent owner. */
+  /**
+   * Create and publish one PTY under the exact live Agent owner.
+   * @param request - terminal backend, optional name, optional cwd, and owning Session identity.
+   * @param signal - cancellation signal for the PTY spawn operation.
+   * @returns the newly published terminal plus its bounded startup message.
+   */
   @Remote('open')
   async open(request: TerminalOpenRequest, signal: AbortSignal): Promise<TerminalOpenValue> {
     if (request.type.length === 0) throw badRequest('terminal.open requires a non-empty backend type')
@@ -93,7 +105,11 @@ export class TerminalControlController extends TypertRemoteService {
     return { ...terminalView(spawned), motd: spawned.motd }
   }
 
-  /** Write exact terminal input, including control sequences and partial lines. */
+  /**
+   * Write exact terminal input, including control sequences and partial lines.
+   * @param request - target Session/terminal identity and exact input bytes-as-text.
+   * @returns a promise that resolves when the input is accepted by the PTY registry.
+   */
   @Remote('write')
   async write(request: TerminalWriteRequest): Promise<void> {
     this.assertTerminalId(request.terminalId)
@@ -101,7 +117,11 @@ export class TerminalControlController extends TypertRemoteService {
     await terminalCallAsync(() => this.registry().write(owner, request.terminalId, request.data))
   }
 
-  /** Resize one live PTY and its terminal emulator geometry. */
+  /**
+   * Resize one live PTY and its terminal emulator geometry.
+   * @param request - target Session/terminal identity and positive row/column geometry.
+   * @returns a promise that resolves when the PTY resize is accepted.
+   */
   @Remote('resize')
   async resize(request: TerminalResizeRequest): Promise<void> {
     this.assertTerminalId(request.terminalId)
@@ -115,7 +135,11 @@ export class TerminalControlController extends TypertRemoteService {
     await terminalCallAsync(() => this.registry().resize(owner, request.terminalId, request.rows, request.cols))
   }
 
-  /** Deliver one allowlisted signal to the verified foreground process group. */
+  /**
+   * Deliver one allowlisted signal to the verified foreground process group.
+   * @param request - target Session/terminal identity and allowlisted process signal.
+   * @returns delivery acknowledgement containing the target process-group id.
+   */
   @Remote('signal')
   signal(request: TerminalSignalRequest): Promise<TerminalSignalValue> {
     this.assertTerminalId(request.terminalId)
@@ -124,7 +148,11 @@ export class TerminalControlController extends TypertRemoteService {
     return terminalCallAsync(() => this.registry().signal(owner, request.terminalId, request.signal))
   }
 
-  /** Close one PTY while preserving registry-owned cleanup fencing. */
+  /**
+   * Close one PTY while preserving registry-owned cleanup fencing.
+   * @param request - target Session/terminal identity to close.
+   * @returns whether this call acquired and performed the close operation.
+   */
   @Remote('close')
   async close(request: TerminalAddressRequest): Promise<TerminalCloseValue> {
     this.assertTerminalId(request.terminalId)
@@ -138,6 +166,9 @@ export class TerminalControlController extends TypertRemoteService {
   /**
    * Stream exact decoded PTY output for a terminal UI. ANSI and control sequences
    * are preserved; cancellation detaches the observer without killing the PTY.
+   * @param request - target Session/terminal identity whose output is observed.
+   * @param signal - cancellation signal that detaches the output observer.
+   * @returns an async stream of exact PTY output frames.
    */
   @Remote({ mode: 'stream' })
   async *output(request: TerminalAddressRequest, signal: AbortSignal): AsyncIterable<TerminalOutputFrame> {
