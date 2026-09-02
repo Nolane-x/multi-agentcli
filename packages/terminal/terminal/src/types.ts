@@ -155,6 +155,12 @@ export interface TerminalBackendSession {
   /** Read one bounded page from retained scrollback. */
   read(request: TerminalReadRequest): TerminalReadResult
   /**
+   * Subscribe to decoded PTY output before sanitization or rendering transforms.
+   * ANSI/control sequences are preserved for interactive terminal UI consumers.
+   * The returned disposer must be safe to call more than once.
+   */
+  subscribeOutput?(listener: (data: string) => void): () => void
+  /**
    * Write exact terminal input bytes without line-oriented readiness semantics.
    * Interactive UI consumers use this capability for keystrokes and control sequences.
    */
