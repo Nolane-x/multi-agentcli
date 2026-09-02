@@ -62,6 +62,7 @@ export type TerminalErrorCode =
   | 'RESIZE_UNSUPPORTED'
   | 'SEND_ACTIVE'
   | 'SERVICE_DISPOSING'
+  | 'WRITE_UNSUPPORTED'
 
 /** Error carrying a stable {@link TerminalErrorCode}. */
 export class TerminalError extends Error {
@@ -263,6 +264,25 @@ export class TerminalSessionService extends Service {
    */
   read(owner: Agent, id: TerminalSessionId, request: TerminalReadRequest = {}): TerminalReadResult {
     return this.expectOwned(owner, id).session.read(request)
+  }
+
+  /**
+   * Write exact terminal input for an owned session without line-oriented readiness semantics.
+   * @param owner - exact session owner.
+   * @param id - target PTY identity.
+   * @param data - exact UTF-8/control-sequence data to write.
+   */
+  async write(owner: Agent, id: TerminalSessionId, data: string): Promise<void> {
+    const record = this.expectOwned(owner, id)
+    if (record.closing !== undefined) throw new Error(`PTY session ${id} is closing`)
+    if (record.active !== undefined) {
+      throw new TerminalError(`PTY session ${id} has an active model send`, 'SEND_ACTIVE')
+    }
+    const write = record.session.write
+    if (write === undefined) {
+      throw new TerminalError(`PTY backend "${record.type}" does not support raw input`, 'WRITE_UNSUPPORTED')
+    }
+    await write.call(record.session, data)
   }
 
   /**
