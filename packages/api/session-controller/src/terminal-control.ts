@@ -78,7 +78,7 @@ export class TerminalControlController extends TypertRemoteService {
 
   /** Create and publish one PTY under the exact live Agent owner. */
   @Remote('open')
-  async open(request: TerminalOpenRequest, signal: AbortSignal = new AbortController().signal): Promise<TerminalOpenValue> {
+  async open(request: TerminalOpenRequest, signal: AbortSignal): Promise<TerminalOpenValue> {
     if (request.type.length === 0) throw badRequest('terminal.open requires a non-empty backend type')
     if (request.name !== undefined && request.name.length === 0) {
       throw badRequest('terminal.open requires a non-empty name when provided')
