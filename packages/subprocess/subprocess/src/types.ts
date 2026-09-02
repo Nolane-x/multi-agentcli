@@ -147,7 +147,7 @@ export interface SubprocessOutputReader {
   readFrom(fromByte: number): SubprocessOutputRead
 }
 
-/** Offset-based readers for collect-mode streams (also readable after exit). */
+/** Offset-based readers for the streams spawned in collect mode. */
 export interface SubprocessCollectedOutputs {
   /** Present iff stdout is a {@link SubprocessCollect}. */
   readonly stdout?: SubprocessOutputReader
