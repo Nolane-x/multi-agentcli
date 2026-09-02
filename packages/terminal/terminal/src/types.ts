@@ -154,6 +154,11 @@ export interface TerminalBackendSession {
   startSend(request: TerminalSendRequest): TerminalSendOperation
   /** Read one bounded page from retained scrollback. */
   read(request: TerminalReadRequest): TerminalReadResult
+  /**
+   * Resize the live terminal without restarting it when the backend supports responsive geometry.
+   * Consumers that require TUI correctness must reject sessions without this capability.
+   */
+  resize?(rows: number, cols: number): Promise<void>
   /** Signal the verified foreground process group. */
   signal(signal: TerminalSignal): Promise<TerminalSignalResult>
   /** Observe top-level process status. */
