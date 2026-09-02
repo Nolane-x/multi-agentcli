@@ -10,9 +10,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import { createSlotRenderer } from './scoped-slots.tsx'
 import { buildRenderApp } from './app.tsx'
 import { SlotRegistry } from './registry.ts'
+import { ScopeProvider as SessionScopeProvider } from './bindings.tsx'
 
 export { SlotRegistry } from './registry.ts'
-export { ScopeProvider as SessionScopeProvider } from './bindings.tsx'
+export { SessionScopeProvider }
 export type { RootOwnerProps } from './registry.ts'
 
 export type {
@@ -21,7 +22,14 @@ export type {
   StandardSourceBinding, StoreInstanceLike,
 } from '@deepseek-ai/dsh-client-ui-slots'
 
-/** Mount operation exposed to the framework-free boot kernel. */
+/** Renderer-owned React capability used by injected client plugins. */
+export type SessionScopeComponent = (props: {
+  scope: 'session' | 'session-maybe'
+  scopeKey?: string
+  children: ReactNode
+}) => ReactNode
+
+/** Mount operation and React capabilities exposed to the framework-free boot kernel and injected plugins. */
 export interface UiRendererService {
   /**
    * Mount the assembled application into the supplied element.
@@ -29,6 +37,8 @@ export interface UiRendererService {
    * @returns Disposer that unmounts the React root.
    */
   mount: (container: HTMLElement) => () => void
+  /** Renderer-owned scoped binding provider; kept as a service to avoid runtime cross-plugin imports. */
+  sessionScope: SessionScopeComponent
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -94,5 +104,6 @@ export function apply(ctx: Context): void {
       const root = mountApp(container, buildRenderApp({ ctx }))
       return () => { root.unmount() }
     },
+    sessionScope: SessionScopeProvider,
   })
-}
+} 
