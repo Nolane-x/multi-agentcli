@@ -59,6 +59,7 @@ export type TerminalErrorCode =
   | 'NO_BACKEND'
   | 'NO_SESSION'
   | 'OWNER_NOT_LIVE'
+  | 'RESIZE_UNSUPPORTED'
   | 'SEND_ACTIVE'
   | 'SERVICE_DISPOSING'
 
@@ -262,6 +263,25 @@ export class TerminalSessionService extends Service {
    */
   read(owner: Agent, id: TerminalSessionId, request: TerminalReadRequest = {}): TerminalReadResult {
     return this.expectOwned(owner, id).session.read(request)
+  }
+
+  /**
+   * Resize one owned live terminal without restarting its process session.
+   * @param owner - exact session owner.
+   * @param id - target PTY identity.
+   * @param rows - positive safe-integer terminal row count.
+   * @param cols - positive safe-integer terminal column count.
+   */
+  async resize(owner: Agent, id: TerminalSessionId, rows: number, cols: number): Promise<void> {
+    const record = this.expectOwned(owner, id)
+    if (!Number.isSafeInteger(rows) || rows <= 0) throw new Error('PTY resize rows must be a positive safe integer')
+    if (!Number.isSafeInteger(cols) || cols <= 0) throw new Error('PTY resize cols must be a positive safe integer')
+    if (record.closing !== undefined) throw new Error(`PTY session ${id} is closing`)
+    const resize = record.session.resize
+    if (resize === undefined) {
+      throw new TerminalError(`PTY backend "${record.type}" does not support live resize`, 'RESIZE_UNSUPPORTED')
+    }
+    await resize.call(record.session, rows, cols)
   }
 
   /**
