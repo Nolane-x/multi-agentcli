@@ -22,5 +22,16 @@ jobs:
           cache: pnpm
       - name: Install immutable workspace
         run: pnpm install --frozen-lockfile
-      - name: Run terminal ownership seam spec
-        run: pnpm exec vitest run packages/api/session-controller/tests/control-terminal.host.spec.ts
+      - name: Prove expected missing terminal API RED
+        shell: bash
+        run: |
+          set +e
+          output=$(pnpm exec vitest run packages/api/session-controller/tests/control-terminal.host.spec.ts 2>&1)
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if (( status == 0 )); then
+            echo 'Expected the terminal seam spec to fail before production implementation.' >&2
+            exit 1
+          fi
+          grep -F 'terminalBackends is not a function' <<<"$output"
