@@ -47,12 +47,13 @@ describe('TerminalControlController', () => {
       subscribeOutput: () => () => {},
     }
     const controller = new TerminalControlController(testContext(terminals, owner))
+    const signal = new AbortController().signal
 
     expect(controller.backends()).toEqual({ items: ['shell'] })
     expect(controller.list({ sessionId: SessionId('owner') })).toEqual({
       items: [{ terminalId: 'pty-1', type: 'shell', pid: 123, status: { kind: 'running' } }],
     })
-    await expect(controller.open({ sessionId: SessionId('owner'), type: 'shell', name: 'claude' }))
+    await expect(controller.open({ sessionId: SessionId('owner'), type: 'shell', name: 'claude' }, signal))
       .resolves.toEqual({ terminalId: 'pty-2', type: 'shell', pid: 456, status: { kind: 'running' }, motd: '$ ' })
     await controller.write({ sessionId: SessionId('owner'), terminalId: 'pty-2', data: 'claude\r' })
     await controller.resize({ sessionId: SessionId('owner'), terminalId: 'pty-2', rows: 40, cols: 120 })
