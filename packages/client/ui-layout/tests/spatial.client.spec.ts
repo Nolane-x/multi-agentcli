@@ -19,6 +19,7 @@ describe('spatial agent mosaic geometry', () => {
     [16, 4],
     [17, 5],
     [25, 5],
+    [26, 6],
   ])('maps %i visible agents to a %ix%i sizing grid', (count, dimension) => {
     expect(mosaicDimension(count)).toBe(dimension)
   })
