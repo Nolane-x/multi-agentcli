@@ -28,22 +28,18 @@ async function bench() {
   const sessions = {
     open: vi.fn(),
     stage: vi.fn(),
+    stopJob: vi.fn(() => Promise.resolve(true)),
   }
-  const stopJob = vi.fn(() => Promise.resolve({
-    ok: true as const,
-    value: { result: 'requested' as const },
-  }))
   ctx.reflect.provide('sessions', sessions as never)
-  ctx.reflect.provide('remote.session', { stopJob } as never)
 
   await ctx.plugin({ inject: themeInject, apply: themeApply }).await()
   await slotsFiber.await()
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, sessions, stopJob }
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, sessions }
 }
 
 describe('ui-layout client apply', () => {
-  it('declares the renderer, presentation, Session, and runtime-control dependencies', () => {
-    expect(inject).toEqual(['slots', 'theme', 'locale', 'sessions', 'remote.session'])
+  it('declares renderer, presentation, and Session-domain dependencies only', () => {
+    expect(inject).toEqual(['slots', 'theme', 'locale', 'sessions'])
   })
 
   it('provides ctx.layout and registers AppFrame with the four spatial child declarations', async () => {
@@ -60,7 +56,7 @@ describe('ui-layout client apply', () => {
   })
 
   it('injects narrow Session navigation/staging and owner-fenced job control while attaching layout actions', async () => {
-    const { ctx, slots, sessions, stopJob } = await bench()
+    const { ctx, slots, sessions } = await bench()
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     const actions = {
@@ -80,12 +76,9 @@ describe('ui-layout client apply', () => {
     expect(sessions.stage).toHaveBeenCalledWith('agent-3')
 
     await expect(injected.stopAgentJob('agent-1', 'subagent-7')).resolves.toBe(true)
-    expect(stopJob).toHaveBeenCalledWith({ sessionId: 'agent-1', jobId: 'subagent-7' })
+    expect(sessions.stopJob).toHaveBeenCalledWith('agent-1', 'subagent-7')
 
-    stopJob.mockResolvedValueOnce({
-      ok: false as const,
-      error: new Error('already gone') as never,
-    })
+    sessions.stopJob.mockResolvedValueOnce(false)
     await expect(injected.stopAgentJob('agent-1', 'subagent-8')).resolves.toBe(false)
 
     const layout = ctx.get('layout') as LayoutController
