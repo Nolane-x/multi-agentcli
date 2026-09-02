@@ -1,4 +1,4 @@
-name: Spatial terminal RED
+name: Spatial terminal check
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  terminal-red:
+  terminal-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -22,16 +22,5 @@ jobs:
           cache: pnpm
       - name: Install immutable workspace
         run: pnpm install --frozen-lockfile
-      - name: Prove expected missing terminal API RED
-        shell: bash
-        run: |
-          set +e
-          output=$(pnpm exec vitest run packages/api/session-controller/tests/control-terminal.host.spec.ts 2>&1)
-          status=$?
-          set -e
-          printf '%s\n' "$output"
-          if (( status == 0 )); then
-            echo 'Expected the terminal seam spec to fail before production implementation.' >&2
-            exit 1
-          fi
-          grep -F 'terminalBackends is not a function' <<<"$output"
+      - name: Verify terminal ownership seam
+        run: pnpm exec vitest run packages/api/session-controller/tests/control-terminal.host.spec.ts
