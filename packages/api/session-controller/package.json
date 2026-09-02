@@ -94,7 +94,6 @@
     "@deepseek-ai/dsh-session-title": "workspace:^",
     "@deepseek-ai/dsh-skill": "workspace:^",
     "@deepseek-ai/dsh-subagent": "workspace:^",
-    "@deepseek-ai/dsh-terminal": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
     "@deepseek-ai/dsh-typert-registry": "workspace:^",
     "@deepseek-ai/dsh-util-time": "workspace:^",
@@ -109,9 +108,6 @@
       "optional": true
     },
     "@deepseek-ai/dsh-session-projection-cache": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-terminal": {
       "optional": true
     }
   },
@@ -141,7 +137,6 @@
     "@deepseek-ai/dsh-storage-domain": "workspace:^",
     "@deepseek-ai/dsh-storage-json": "workspace:^",
     "@deepseek-ai/dsh-subagent": "workspace:^",
-    "@deepseek-ai/dsh-terminal": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
     "@deepseek-ai/dsh-typert-registry": "workspace:^",
     "@deepseek-ai/dsh-util-crypto": "workspace:^",
