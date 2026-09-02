@@ -374,6 +374,18 @@ export class LocalPtySession implements TerminalBackendSession {
     }
   }
 
+  async resize(rows: number, cols: number): Promise<void> {
+    if (this.closing) throw new Error('PTY session is closing')
+    if (this.statusValue.kind === 'exited') throw new Error('PTY session has exited')
+    const resize = this.terminal.resize
+    if (resize === undefined) {
+      throw new TerminalError('subprocess terminal provider does not support live resize', 'RESIZE_UNSUPPORTED')
+    }
+    if (this.protocolWorkPending()) await this.drainTerminalProtocol()
+    await resize.call(this.terminal, rows, cols)
+    if (!this.closing && !this.emulatorClosed) this.emulator.resize(cols, rows)
+  }
+
   async signal(signal: TerminalSignal): Promise<TerminalSignalResult> {
     if (this.closing) throw new Error('PTY session is closing')
     const targetPgid = await this.terminal.signalForeground(signal)
