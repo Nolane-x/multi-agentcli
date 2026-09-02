@@ -24,38 +24,70 @@ async function bench() {
   // ui-theme's Appearance row binds a durable scope through these two.
   ctx.provide('remote', { $on: () => () => {} } as never)
   ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
+
+  const sessions = {
+    open: vi.fn(),
+    stage: vi.fn(),
+  }
+  const stopJob = vi.fn(() => Promise.resolve({
+    ok: true as const,
+    value: { result: 'requested' as const },
+  }))
+  ctx.reflect.provide('sessions', sessions as never)
+  ctx.reflect.provide('remote.session', { stopJob } as never)
+
   await ctx.plugin({ inject: themeInject, apply: themeApply }).await()
   await slotsFiber.await()
-  return { ctx, slots: ctx.get('slots') as SlotRegistry }
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, sessions, stopJob }
 }
 
 describe('ui-layout client apply', () => {
-  it('declares its service dependencies', () => {
-    expect(inject).toEqual(['slots', 'theme', 'locale'])
+  it('declares the renderer, presentation, Session, and runtime-control dependencies', () => {
+    expect(inject).toEqual(['slots', 'theme', 'locale', 'sessions', 'remote.session'])
   })
 
-  it('provides ctx.layout and registers AppFrame into root with the three child declarations', async () => {
+  it('provides ctx.layout and registers AppFrame with the four spatial child declarations', async () => {
     const { ctx, slots } = await bench()
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     expect(ctx.get('layout')).toBeInstanceOf(LayoutController)
-    // The one register() call occupied 'root'…
+    // The one register() call occupies root and keeps all upstream child seams.
     expect(slots.entries('root')).toHaveLength(1)
-    // …and declared the three children in the ledger.
     expect(slots.spec('sidebar')).toEqual({ kind: 'single', scope: 'root' })
     expect(slots.spec('conversation')).toEqual({ kind: 'single', scope: 'session-maybe' })
     expect(slots.spec('details')).toEqual({ kind: 'single', scope: 'session' })
+    expect(slots.spec('shell.overlay')).toEqual({ kind: 'list', scope: 'root' })
   })
 
-  it('injects no business face and attaches the layout actions', async () => {
-    const { ctx, slots } = await bench()
+  it('injects narrow Session navigation/staging and owner-fenced job control while attaching layout actions', async () => {
+    const { ctx, slots, sessions, stopJob } = await bench()
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     const actions = {
       setSidebar: vi.fn(), setDetails: vi.fn(), toggleSidebar: vi.fn(), openDetails: vi.fn(), closeDetails: vi.fn(),
     }
-    const injected = (slots.entries('root')[0]!.inject as (actions: never) => object)(actions as never)
-    expect(injected).toEqual({})
+    const injected = (slots.entries('root')[0]!.inject as (actions: never) => {
+      SessionScope: unknown
+      openAgent(sessionId: string): void
+      stageAgent(sessionId: string): void
+      stopAgentJob(sessionId: string, jobId: string): Promise<boolean>
+    })(actions as never)
+
+    expect(injected.SessionScope).toBeTypeOf('function')
+    injected.openAgent('agent-2')
+    injected.stageAgent('agent-3')
+    expect(sessions.open).toHaveBeenCalledWith('agent-2')
+    expect(sessions.stage).toHaveBeenCalledWith('agent-3')
+
+    await expect(injected.stopAgentJob('agent-1', 'subagent-7')).resolves.toBe(true)
+    expect(stopJob).toHaveBeenCalledWith({ sessionId: 'agent-1', jobId: 'subagent-7' })
+
+    stopJob.mockResolvedValueOnce({
+      ok: false as const,
+      error: new Error('already gone') as never,
+    })
+    await expect(injected.stopAgentJob('agent-1', 'subagent-8')).resolves.toBe(false)
+
     const layout = ctx.get('layout') as LayoutController
     layout.toggleSidebar()
     expect(actions.toggleSidebar).toHaveBeenCalledOnce()
