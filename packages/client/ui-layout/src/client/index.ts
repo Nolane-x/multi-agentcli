@@ -7,7 +7,7 @@
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import { SessionScopeProvider } from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionIdOf } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
@@ -63,14 +63,26 @@ export interface ConvOwnerProps {}
 /** Details owner share: sessionId arrives as a framework-standard prop. */
 export interface DetailsOwnerProps {}
 
-/** Required services. Session navigation and runtime control share one domain capability. */
-export const inject = ['slots', 'theme', 'locale', 'sessions']
+/** Renderer-owned React capability used by injected client plugins. */
+interface SessionScopeComponent {
+  (props: {
+    scope: 'session' | 'session-maybe'
+    scopeKey?: string
+    children: React.ReactNode
+  }): React.ReactNode
+}
+
+/** Services required. Session navigation/runtime and the renderer scope share one domain capability. */
+export const inject = ['slots', 'theme', 'locale', 'sessions', 'uiRenderer']
 
 type SpatialSessionsContext = ClientContext & {
   sessions: {
     open: (sessionId: SessionIdOf) => void
     stage: (sessionId: SessionIdOf) => void
     stopJob: (sessionId: SessionIdOf, jobId: string) => Promise<boolean>
+  }
+  uiRenderer: {
+    sessionScope: SessionScopeComponent
   }
 }
 
@@ -82,7 +94,8 @@ export function apply(ctx: ClientContext): void {
   const layout = new LayoutController()
   ctx.effect(() => {
     const disposeService = ctx.reflect.provide('layout', layout)
-    const sessions = (ctx as SpatialSessionsContext).sessions
+    const services = ctx as SpatialSessionsContext
+    const sessions = services.sessions
     const disposeRegistration = ctx.slots.register({
       name: 'root',
       locale: 'common',
@@ -96,9 +109,9 @@ export function apply(ctx: ClientContext): void {
       inject: (actions: PanelActions) => {
         layout.attachPanels(actions)
         return {
-          // Public renderer capability: pin one subtree to an explicit Session
-          // without changing the current-session binding used elsewhere.
-          SessionScope: SessionScopeProvider,
+          // Renderer-owned scope capability arrives through Cordis injection;
+          // ui-layout never imports the renderer's React runtime directly.
+          SessionScope: services.uiRenderer.sessionScope,
           // Real navigation through the Session Controller. This is the same
           // authority used by upstream workspace/session UI, not DOM automation.
           openAgent: (sessionId: SessionIdOf) => {
