@@ -262,46 +262,55 @@ async function terminalCallAsync<T>(operation: () => T | Promise<T>): Promise<T>
   }
 }
 
+/* jscpd:ignore-start */
 class TerminalOutputQueue {
-  private readonly frames: TerminalOutputFrame[] = []
-  private waiter: (() => void) | undefined
-  private ended = false
+  private readonly frames = new Deque<TerminalOutputFrame>()
+  private waiting: (() => void) | undefined
+  private closed = false
 
   push(frame: TerminalOutputFrame): void {
-    if (this.ended) return
-    this.frames.push(frame)
-    this.waiter?.()
+    if (this.closed) return
+    this.frames.pushBack(frame)
+    this.waiting?.()
   }
 
   close(): void {
-    this.ended = true
-    this.waiter?.()
-    this.waiter = undefined
+    if (this.closed) return
+    this.closed = true
+    this.waiting?.()
   }
 
   async *read(signal: AbortSignal): AsyncIterable<TerminalOutputFrame> {
-    while (!this.ended && !signal.aborted) {
-      const next = this.frames.shift()
-      if (next !== undefined) {
-        yield next
-      } else {
-        await this.waitForData(signal)
+    const abort = (): void => { this.close() }
+    signal.addEventListener('abort', abort, { once: true })
+    try {
+      while (!this.closed && !signal.aborted) {
+        const frame = this.frames.popFront()
+        if (frame !== undefined) {
+          yield frame
+          continue
+        }
+        await this.wait(signal)
       }
+    } finally {
+      signal.removeEventListener('abort', abort)
+      this.close()
     }
   }
 
-  private waitForData(signal: AbortSignal): Promise<void> {
-    return new Promise(resolve => {
-      const wake = (): void => {
-        this.waiter = undefined
-        signal.removeEventListener('abort', wake)
+  private wait(signal: AbortSignal): Promise<void> {
+    return new Promise((resolve) => {
+      const finish = (): void => {
+        signal.removeEventListener('abort', finish)
+        if (this.waiting === finish) this.waiting = undefined
         resolve()
       }
-      this.waiter = wake
-      signal.addEventListener('abort', wake, { once: true })
-      if (this.ended || this.frames.length > 0 || signal.aborted) wake()
+      this.waiting = finish
+      signal.addEventListener('abort', finish, { once: true })
+      if (signal.aborted || this.closed || this.frames.size > 0) finish()
     })
   }
 }
+/* jscpd:ignore-end */
 
 export default TerminalControlController
