@@ -8,8 +8,14 @@ import type {
   Session, SessionEvent, SessionEventMap, SessionId, UserMessage,
 } from '@deepseek-ai/dsh-session'
 import type {
+  TerminalReadRequest,
+  TerminalReadResult,
+  TerminalSendRequest,
+  TerminalSendResult,
   TerminalSessionId,
   TerminalSessionSnapshot,
+  TerminalSignal,
+  TerminalSignalResult,
   TerminalSpawnRequest,
   TerminalSpawnResult,
 } from '@deepseek-ai/dsh-terminal'
@@ -85,6 +91,37 @@ export class SessionControlController {
     signal?: AbortSignal,
   ): Promise<TerminalSpawnResult> {
     return this.terminals().spawn(this.terminalOwner(sessionId), request, signal)
+  }
+
+  /** Send input through the PTY registry and await the bounded settled interaction result. */
+  sendTerminal(
+    sessionId: SessionId,
+    terminalId: TerminalSessionId,
+    request: TerminalSendRequest,
+  ): Promise<TerminalSendResult> {
+    return this.terminals().startSend(
+      this.terminalOwner(sessionId),
+      terminalId,
+      request,
+    ).done
+  }
+
+  /** Read one bounded retained scrollback page through the PTY owner fence. */
+  readTerminal(
+    sessionId: SessionId,
+    terminalId: TerminalSessionId,
+    request: TerminalReadRequest = {},
+  ): TerminalReadResult {
+    return this.terminals().read(this.terminalOwner(sessionId), terminalId, request)
+  }
+
+  /** Deliver one supported signal to the verified foreground process group. */
+  signalTerminal(
+    sessionId: SessionId,
+    terminalId: TerminalSessionId,
+    signal: TerminalSignal,
+  ): Promise<TerminalSignalResult> {
+    return this.terminals().signal(this.terminalOwner(sessionId), terminalId, signal)
   }
 
   /**
