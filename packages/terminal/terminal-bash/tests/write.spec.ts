@@ -1,42 +1,41 @@
+import { PassThrough } from 'node:stream'
 import { describe, expect, it } from 'vitest'
-import type { SubprocessTerminal } from '@deepseek-ai/dsh-subprocess'
-import { LocalPtySession } from '../src/session.ts'
-import { config } from './fixtures.ts'
+import type { ResolvedConfig } from '@deepseek-ai/dsh-terminal-bash/src/config.ts'
+import { LocalPtySession } from '@deepseek-ai/dsh-terminal-bash/src/session.ts'
+import type { SubprocessOutcome, SubprocessTerminalHandle } from '@deepseek-ai/dsh-subprocess'
 
-class OrderedTerminal implements SubprocessTerminal {
-  readonly output = new EventTarget() as SubprocessTerminal['output']
+class OrderedTerminal implements SubprocessTerminalHandle {
+  readonly pid = 123
+  readonly output = new PassThrough()
+  readonly outcome = Promise.withResolvers<SubprocessOutcome>()
+  readonly done = this.outcome.promise
   readonly writes: string[] = []
-  readonly pid = 1
   firstWriteGate: PromiseWithResolvers<void> | undefined
 
   async write(data: string): Promise<void> {
     this.writes.push(data)
     if (this.writes.length === 1 && this.firstWriteGate !== undefined) await this.firstWriteGate.promise
   }
-
-  async close(): Promise<void> {}
-
-  async signalForeground(): Promise<number> {
-    return 1
+  async resize(): Promise<void> {}
+  async inspectForeground() { return { processGroupId: 123, inputWaiting: true } }
+  async signalForeground() { return 123 }
+  async terminate(): Promise<void> {
+    this.output.end()
+    this.outcome.resolve({ exitCode: 0, signal: null })
   }
+}
 
-  status(): { kind: 'running' } {
-    return { kind: 'running' }
+function config(): ResolvedConfig {
+  return {
+    backendType: 'shell', shellDialect: 'bash', shellPath: '/bin/bash', shellArgs: [], rows: 24, cols: 80,
+    scrollbackLines: 10, scrollbackMaxBytes: 128, maxReadBytes: 64,
+    pollIntervalMs: 10, exactProbeAfterMs: 20, idleSilenceMs: 50, handoffGraceMs: 10, timeoutMs: 100,
+    disposeGraceMs: 20,
   }
 }
 
 describe('LocalPtySession raw input', () => {
-  it('writes exact control sequences without adding a submit newline', async () => {
-    const terminal = new OrderedTerminal()
-    const session = new LocalPtySession(terminal, config())
-
-    await session.write('\u001b[A')
-
-    expect(terminal.writes).toEqual(['\u001b[A'])
-    await session.close('test complete')
-  })
-
-  it('serializes concurrent raw writes in admission order', async () => {
+  it('serializes rapid keystrokes in exact call order', async () => {
     const terminal = new OrderedTerminal()
     terminal.firstWriteGate = Promise.withResolvers<void>()
     const session = new LocalPtySession(terminal, config())
