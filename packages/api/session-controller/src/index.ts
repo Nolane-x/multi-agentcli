@@ -2,7 +2,6 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { JobId } from '@deepseek-ai/dsh-jobs'
 import { errorChain } from '@deepseek-ai/dsh-llm'
 import { canOpenNativePath, openNativePath } from '@deepseek-ai/dsh-native-command'
 import type { SessionId } from '@deepseek-ai/dsh-session'
@@ -49,6 +48,8 @@ import type {
   SessionSearchValue,
   SessionSelectModelRequest,
   SessionSelectModelValue,
+  SessionStopJobRequest,
+  SessionStopJobValue,
   SessionUpdateQueueRequest,
   SessionUpdateQueueValue,
 } from './types.ts'
@@ -79,17 +80,6 @@ export interface SessionControllerInternals {
   readonly openPath?: (path: string, signal: AbortSignal) => Promise<void>
   /** Native handoff availability probe. */
   readonly canOpenPath?: () => boolean
-}
-
-/** Browser request to stop one owner-fenced background job. */
-export interface SessionStopJobRequest {
-  readonly sessionId: SessionId
-  readonly jobId: JobId
-}
-
-/** Registry result after a human stop request. */
-export interface SessionStopJobValue {
-  readonly result: 'requested' | 'already-finished'
 }
 
 /** Host service backing the generated `ctx.remote.session` namespace. */
