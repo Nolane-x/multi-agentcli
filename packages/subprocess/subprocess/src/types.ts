@@ -147,7 +147,7 @@ export interface SubprocessOutputReader {
   readFrom(fromByte: number): SubprocessOutputRead
 }
 
-/** Offset-based readers for collect-mode streams (also readable after exit). */
+/** Offset-based readers for the streams spawned in collect mode. */
 export interface SubprocessCollectedOutputs {
   /** Present iff stdout is a {@link SubprocessCollect}. */
   readonly stdout?: SubprocessOutputReader
@@ -173,7 +173,7 @@ export interface SubprocessHandle {
   readonly stdout: Readable | undefined
   /** The child's raw stderr, present iff spawned with `stderr: 'pipe'`. */
   readonly stderr: Readable | undefined
-  /** Offset-based readers for collect-mode streams (also readable after exit). */
+  /** Offset-based readers for the streams spawned in collect mode (also readable after exit). */
   readonly collected: SubprocessCollectedOutputs
   /** Resolves at process close with exit facts; rejects only for spawn-level failures. */
   readonly done: Promise<SubprocessOutcome>
@@ -204,7 +204,7 @@ export type SubprocessTerminalSignal = 'SIGINT' | 'SIGTERM' | 'SIGKILL' | 'SIGTS
 export interface SubprocessTerminalSpawnSpec {
   /** Executable and arguments; `argv[0]` is the program. */
   argv: readonly string[]
-  /** Working directory in this subprocess provider's execution world. */
+  /** Working directory for the child. */
   cwd: string
   /** Explicit environment layered after the provider's ambient scrub. */
   env?: Record<string, string> | undefined
