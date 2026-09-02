@@ -46,6 +46,10 @@ pnpm dsh web
 
 The spatial shell keeps agent terminals resident in the application instead of treating each agent as a separate browser tab. Its client surface supports adaptive terminal tiling, focused/maximized views, workspace staging, and owner-scoped terminal control. The underlying PTY surface is exposed through the `terminal` Remote namespace so higher-level orchestration can create, inspect, message, delegate, stop, and continue agent work without bypassing session ownership.
 
+### Release candidate
+
+The spatial shell is validated as a release candidate only when the repository's static, coverage, consumer/snapshot, and cross-platform release gates are green on the exact PR head. The UI and PTY surface are intentionally kept thin so plugins and upstream Cordis extensions remain outside the core orchestration path.
+
 ## Community and support
 
 - Submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).
