@@ -173,7 +173,7 @@ export interface SubprocessHandle {
   readonly stdout: Readable | undefined
   /** The child's raw stderr, present iff spawned with `stderr: 'pipe'`. */
   readonly stderr: Readable | undefined
-  /** Offset-based readers for the streams spawned in collect mode (also readable after exit). */
+  /** Offset-based readers for collect-mode streams (also readable after exit). */
   readonly collected: SubprocessCollectedOutputs
   /** Resolves at process close with exit facts; rejects only for spawn-level failures. */
   readonly done: Promise<SubprocessOutcome>
