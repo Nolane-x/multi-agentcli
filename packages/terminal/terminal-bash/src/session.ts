@@ -169,6 +169,7 @@ export class LocalPtySession implements TerminalBackendSession {
   private readonly scrollback: BoundedTextBuffer
   private readonly outputEnded = Promise.withResolvers<void>()
   private readonly completion: Promise<void>
+  private readonly rawOutputListeners = new Set<(data: string) => void>()
   private statusValue: TerminalSessionStatus = { kind: 'running' }
   // TODO(pty-send-state-consolidation): Fold the per-send fields below
   // (active/activeTimer/activeDeadlineTimer/activeAbort/interrupting/
@@ -378,6 +379,18 @@ export class LocalPtySession implements TerminalBackendSession {
     }
   }
 
+  subscribeOutput(listener: (data: string) => void): () => void {
+    if (this.closing) throw new Error('PTY session is closing')
+    if (this.statusValue.kind === 'exited') throw new Error('PTY session has exited')
+    this.rawOutputListeners.add(listener)
+    let disposed = false
+    return () => {
+      if (disposed) return
+      disposed = true
+      this.rawOutputListeners.delete(listener)
+    }
+  }
+
   async write(data: string): Promise<void> {
     if (this.closing) throw new Error('PTY session is closing')
     if (this.statusValue.kind === 'exited') throw new Error('PTY session has exited')
@@ -435,12 +448,15 @@ export class LocalPtySession implements TerminalBackendSession {
   private readonly onTerminalData = (chunk: Buffer | Uint8Array | string): void => {
     const bytes = typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : chunk
     const data = this.decoder.decode(bytes, { stream: true })
+    this.emitRawOutput(data)
     this.queueEmulatorData(data)
     this.onData(data)
   }
 
   private readonly onTerminalEnd = (): void => {
-    this.onData(this.decoder.decode())
+    const tail = this.decoder.decode()
+    this.emitRawOutput(tail)
+    this.onData(tail)
     this.appendOutput(this.sanitizer.flush())
     this.closeEmulator()
     this.outputEnded.resolve()
@@ -450,6 +466,17 @@ export class LocalPtySession implements TerminalBackendSession {
     this.closeEmulator()
     this.onTransportFailure(error)
     this.outputEnded.resolve()
+  }
+
+  private emitRawOutput(data: string): void {
+    if (data.length === 0) return
+    for (const listener of [...this.rawOutputListeners]) {
+      try {
+        listener(data)
+      } catch {
+        // UI/Remote consumers are observers; one failing listener must not corrupt PTY transport state.
+      }
+    }
   }
 
   private onData(data: string): void {
@@ -644,6 +671,7 @@ export class LocalPtySession implements TerminalBackendSession {
   private closeEmulator(): void {
     if (this.emulatorClosed) return
     this.emulatorClosed = true
+    this.rawOutputListeners.clear()
     this.emulatorBuffer = ''
     this.emulatorWriting = false
     const done = this.emulatorWriteDone
