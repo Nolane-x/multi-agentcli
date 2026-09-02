@@ -142,6 +142,24 @@ describe('Session Controller Client apply', () => {
     expect(connected).toHaveBeenCalledOnce()
   })
 
+  it('routes owner-fenced job stop through the Session Remote and reports admission as a boolean', async () => {
+    const bench = await mount()
+    const sessions = bench.sessions as ClientSessions & {
+      stopJob(sessionId: SessionId, jobId: string): Promise<boolean>
+    }
+
+    await expect(sessions.stopJob(sid('agent-1'), 'subagent-7')).resolves.toBe(true)
+    expect(bench.api.callsOf('session.stopJob')).toEqual([
+      { sessionId: sid('agent-1'), jobId: 'subagent-7' },
+    ])
+
+    bench.api.onStopJob = () => Promise.resolve({
+      ok: false,
+      error: new Error('job already gone') as never,
+    })
+    await expect(sessions.stopJob(sid('agent-1'), 'subagent-8')).resolves.toBe(false)
+  })
+
   it('accepts the control baseline, retries a carrier generation, and reports terminal protocol failure', async () => {
     const accept = vi.spyOn(ClientSessions.prototype, 'handleControlFrame')
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
