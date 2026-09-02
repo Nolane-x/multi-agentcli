@@ -173,7 +173,7 @@ export interface SubprocessHandle {
   readonly stdout: Readable | undefined
   /** The child's raw stderr, present iff spawned with `stderr: 'pipe'`. */
   readonly stderr: Readable | undefined
-  /** Offset-based readers for the streams spawned in collect mode. */
+  /** Offset-based readers for the streams spawned in collect mode (also readable after exit). */
   readonly collected: SubprocessCollectedOutputs
   /** Resolves at process close with exit facts; rejects only for spawn-level failures. */
   readonly done: Promise<SubprocessOutcome>
@@ -245,11 +245,12 @@ export interface SubprocessTerminalHandle {
    */
   write(data: string): Promise<void>
   /**
-   * Resize the allocated terminal without restarting its process session.
+   * Resize the allocated terminal without restarting its process session when the provider supports it.
+   * Consumers that require responsive TUI rendering must reject handles without this capability instead of silently ignoring resize.
    * @param rows - terminal row count.
    * @param cols - terminal column count.
    */
-  resize(rows: number, cols: number): Promise<void>
+  resize?(rows: number, cols: number): Promise<void>
   /**
    * Inspect the current foreground process group.
    * @returns its id and input-wait fact, or undefined when no foreground group can be resolved.
@@ -263,7 +264,7 @@ export interface SubprocessTerminalHandle {
   signalForeground(signal: SubprocessTerminalSignal): Promise<number>
   /**
    * Idempotently terminate every terminal-session member the provider can still observe and await quiescence.
-   * After settlement, no write, resize, inspection, or signal call remains in flight.
+   * After settlement, no write, supported resize, inspection, or signal call remains in flight.
    * Providers document substrate-specific observability limits.
    */
   terminate(): Promise<void>
