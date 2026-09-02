@@ -34,13 +34,19 @@ jobs:
           from pathlib import Path
           p = Path('scripts/gen-cordis-catalog.ts')
           s = p.read_text()
+
+          service_marker = "  terminals: 'terminal.md',\n"
+          if "  terminalControlController: 'terminal.md'," not in s:
+              if service_marker not in s:
+                  raise SystemExit('SERVICE_PAGE terminal marker not found')
+              s = s.replace(service_marker, service_marker + "  terminalControlController: 'terminal.md',\n", 1)
+
           marker = "\n}\n\n/** TypeScript lib and pinned framework types with no repository-owned data page. */"
           if marker not in s:
               raise SystemExit('LINK_MAP closing marker not found')
           entries = """\n  SessionStopJobRequest: 'jobs.md',\n  SessionStopJobValue: 'jobs.md',\n  TerminalBackendsValue: 'terminal.md',\n  TerminalListRequest: 'terminal.md',\n  TerminalListValue: 'terminal.md',\n  TerminalOpenRequest: 'terminal.md',\n  TerminalOpenValue: 'terminal.md',\n  TerminalWriteRequest: 'terminal.md',\n  TerminalResizeRequest: 'terminal.md',\n  TerminalSignalRequest: 'terminal.md',\n  TerminalSignalValue: 'terminal.md',\n  TerminalAddressRequest: 'terminal.md',\n  TerminalCloseValue: 'terminal.md',\n  TerminalOutputFrame: 'terminal.md',\n"""
-          if 'SessionStopJobRequest: \'jobs.md\'' in s:
-              raise SystemExit('canonical type-link entries already present')
-          s = s.replace(marker, entries + marker, 1)
+          if '  SessionStopJobRequest: \'jobs.md\',' not in s:
+              s = s.replace(marker, entries + marker, 1)
           p.write_text(s)
           PY
           pnpm run gen-cordis-catalog
