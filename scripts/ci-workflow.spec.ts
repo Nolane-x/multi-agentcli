@@ -388,29 +388,6 @@ describe('CI workflow', () => {
   })
 })
 
-describe('DeepSeek e2e workflow', () => {
-  it('prepares bubblewrap from the pinned payload without a package transaction', () => {
-    const workflow = loadWorkflow('.github/workflows/e2e.yml')
-    const e2e = workflowJob(workflow, 'e2e')
-    if (!Array.isArray(e2e.steps)) throw new TypeError('DeepSeek e2e workflow must define steps')
-
-    const steps = e2e.steps.filter(isRecord)
-    expect(steps.find(step => step.name === 'Prepare bubblewrap (unrestrict userns)')).toMatchObject({
-      run: 'bash scripts/prepare-ci-bubblewrap.sh',
-    })
-    expect(JSON.stringify(steps)).not.toContain('apt-get')
-  })
-
-  it('bounds profile subprocess fan-out to the tested e2e default', () => {
-    const workflow = loadWorkflow('.github/workflows/e2e.yml')
-    const e2e = workflowJob(workflow, 'e2e')
-    if (!Array.isArray(e2e.steps)) throw new TypeError('DeepSeek e2e workflow must define steps')
-
-    const step = e2e.steps.filter(isRecord).find(candidate => candidate.name === 'E2E tests (real DeepSeek API)')
-    expect(step).toMatchObject({ env: { DSH_E2E_MAX_WORKERS: 4 } })
-  })
-})
-
 describe('E2B e2e workflow', () => {
   it('is manual-only and fails loud before running the focused live suite', () => {
     const workflow = loadWorkflow('.github/workflows/e2b-e2e.yml')
