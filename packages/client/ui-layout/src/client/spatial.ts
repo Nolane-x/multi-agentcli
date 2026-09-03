@@ -43,6 +43,8 @@ export interface SpatialAgentLineage<Id extends string = string> {
  * Grid dimension used by the mosaic. The shell deliberately starts at 2×2:
  * one agent therefore occupies roughly one quarter of the canvas, 1–4 agents
  * share 2×2 sizing, 5–9 share 3×3 sizing, and so on.
+ * @param agentCount Number of agent tiles to fit.
+ * @returns The square grid dimension.
  */
 export function mosaicDimension(agentCount: number): number {
   if (!Number.isFinite(agentCount) || agentCount < 0) {
@@ -52,7 +54,11 @@ export function mosaicDimension(agentCount: number): number {
   return Math.max(2, Math.ceil(Math.sqrt(count)))
 }
 
-/** Percentage of one tile edge before inter-tile gaps are subtracted in CSS. */
+/**
+ * Percentage of one tile edge before inter-tile gaps are subtracted in CSS.
+ * @param agentCount Number of agent tiles to fit.
+ * @returns The percentage occupied by one grid cell.
+ */
 export function mosaicCellPercent(agentCount: number): number {
   return 100 / mosaicDimension(agentCount)
 }
@@ -60,22 +66,29 @@ export function mosaicCellPercent(agentCount: number): number {
 /** Follow parent links to the highest locally-known ancestor, cycle-safe. */
 function rootOf<Id extends string>(start: Id, byId: SpatialSessionMap<Id>): Id {
   let cursor = start
-  const seen = new Set<Id>()
-  while (!seen.has(cursor)) {
-    seen.add(cursor)
+  const path: Id[] = []
+  const positions = new Map<Id, number>()
+  while (!positions.has(cursor)) {
+    positions.set(cursor, path.length)
+    path.push(cursor)
     const parent = byId[cursor]?.parentId
     if (parent === undefined || byId[parent] === undefined) return cursor
     cursor = parent
   }
-  // A corrupt cycle has no canonical top. The stable lexical minimum makes
-  // every member of the same cycle converge on the same family root.
-  return [...seen].sort()[0] ?? start
+  // A corrupt cycle has no canonical top. Use only the cycle members (not an
+  // attached descendant) so every member of the connected family converges on
+  // the same stable lexical root.
+  const cycleStart = positions.get(cursor) ?? 0
+  return path.slice(cycleStart).sort()[0] ?? start
 }
 
 /**
  * Derive one Session's locally-known parent relation and depth. This uses the
  * same cycle-safe root authority as family selection, so presentation cannot
  * accidentally elect the first rendered tile as leader.
+ * @param id Session whose lineage is requested.
+ * @param byId Locally-known Session summaries keyed by ID.
+ * @returns The canonical root, direct parent, and parent-edge depth.
  */
 export function spatialAgentLineage<Id extends string>(
   id: Id,
@@ -128,6 +141,10 @@ function descendsFrom<Id extends string>(
  *
  * Without a current Session there is no family anchor, so only actively
  * running Sessions surface as ambient work.
+ * @param orderedIds Session IDs in their preferred display order.
+ * @param byId Locally-known Session summaries keyed by ID.
+ * @param current Current Session used as the family anchor, if any.
+ * @returns Session IDs that should appear on the spatial canvas.
  */
 export function canvasAgentIds<Id extends string>(
   orderedIds: readonly Id[],
@@ -153,6 +170,9 @@ export function canvasAgentIds<Id extends string>(
  * canvas. These jobs are real child-agent executions but do not own a Harness
  * Session transcript, so callers must present lifecycle/status only rather
  * than fabricating a conversation surface.
+ * @param orderedOwnerIds Canvas Session IDs in their preferred display order.
+ * @param jobsByOwner Active and historical jobs keyed by owning Session.
+ * @returns Active subagent jobs projected onto the canvas.
  */
 export function canvasSubagentJobs<OwnerId extends string, JobId extends string>(
   orderedOwnerIds: readonly OwnerId[],

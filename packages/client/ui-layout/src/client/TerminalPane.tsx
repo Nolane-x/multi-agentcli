@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type Keyboa
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { TerminalSessionClient } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { TerminalRemoteSignal } from '@deepseek-ai/dsh-api-session-controller/terminal-types'
+import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { createTerminalScreen, type TerminalScreen, type TerminalScreenSnapshot } from './terminal-vt.ts'
 import css from './TerminalPane.module.css'
 
@@ -20,6 +21,7 @@ const CELL_HEIGHT = 18
 export interface TerminalPaneProps {
   sessionId: SessionId
   terminal: TerminalSessionClient
+  t: TranslateNS<'common'>
   backend?: string
   cwd?: string
   onClosed?: () => void
@@ -189,20 +191,20 @@ export function TerminalPane(props: TerminalPaneProps) {
       className={css.pane}
       data-terminal-phase={phase}
       data-terminal-id={terminalId}
-      aria-label="Terminal pane"
+      aria-label={props.t('spatial.agent.pane')}
     >
       <header className={css.header}>
         <span className={css.title}>
           <span className={css.prompt} aria-hidden="true">›</span>
-          {phase === 'opening' ? 'Starting terminal' : phase === 'closed' ? 'Terminal closed' : 'Agent terminal'}
+          {phase === 'opening' ? props.t('spatial.agent.startingTerminal') : phase === 'closed' ? props.t('spatial.agent.closedTerminal') : props.t('spatial.agent.agentTerminal')}
         </span>
         <div className={css.actions}>
           {terminalId !== undefined && phase === 'running' && (
-            <button type="button" className={css.action} aria-label="Stop terminal" onClick={stop}>Stop</button>
+            <button type="button" className={css.action} aria-label={props.t('spatial.agent.stopTerminal')} onClick={stop}>{props.t('spatial.agent.stop')}</button>
           )}
           {terminalId !== undefined && phase !== 'closed' && (
-            <button type="button" className={css.action} aria-label="Close terminal" onClick={close} disabled={phase === 'stopping'}>
-              Close
+            <button type="button" className={css.action} aria-label={props.t('spatial.agent.closeTerminal')} onClick={close} disabled={phase === 'stopping'}>
+              {props.t('spatial.agent.close')}
             </button>
           )}
         </div>
@@ -211,20 +213,20 @@ export function TerminalPane(props: TerminalPaneProps) {
         ref={viewportRef}
         className={css.viewport}
         role="region"
-        aria-label="Terminal output"
+        aria-label={props.t('spatial.agent.output')}
         onClick={() => viewportRef.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus()}
       >
         <pre>{snapshot.rows.join('\n')}</pre>
         <textarea
           className={css.input}
-          aria-label="Terminal input"
+          aria-label={props.t('spatial.agent.input')}
           rows={1}
           spellCheck={false}
           autoComplete="off"
           onChange={onInput}
           onKeyDown={onKeyDown}
         />
-        {phase === 'error' && <div className={css.error} role="alert">{error ?? 'Terminal unavailable'}</div>}
+        {phase === 'error' && <div className={css.error} role="alert">{error ?? props.t('spatial.agent.unavailable')}</div>}
       </div>
     </section>
   )

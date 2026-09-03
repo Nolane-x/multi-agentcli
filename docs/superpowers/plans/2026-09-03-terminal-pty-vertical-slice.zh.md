@@ -1,18 +1,18 @@
-# Interactive Terminal PTY Vertical Slice Implementation Plan
+# 交互式终端 PTY 垂直切片实现计划
 
-English | [中文](2026-09-03-terminal-pty-vertical-slice.zh.md)
+[English](2026-09-03-terminal-pty-vertical-slice.md) | 中文
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Connect the existing owner-scoped terminal Remote to a real interactive VT terminal surface inside the spatial agent shell, while preserving Harness conversation access and keeping local/CI operation independent of a DeepSeek API key.
+**目标：** 将现有的所有者作用域终端 Remote 接入空间智能体外壳中的真实交互式 VT 终端界面，同时保留 Harness 对话访问，并确保本地与 CI 运行不依赖 DeepSeek API key。
 
-**Architecture:** The Host keeps process ownership in `TerminalControlController`. The Client exposes a narrow `ISessions.terminal` capability backed by the generated `ctx.remote.terminal` namespace. `ui-layout` owns only pane presentation and focus state; `TerminalPane` owns its stream subscription, VT screen model, input proxy, resize reporting, and close lifecycle.
+**架构：** Host 在 `TerminalControlController` 中保留进程所有权。Client 暴露由生成的 `ctx.remote.terminal` 命名空间支持的窄 `ISessions.terminal` 能力。`ui-layout` 只负责面板呈现和焦点状态；`TerminalPane` 负责流订阅、VT 屏幕模型、输入代理、尺寸上报和关闭生命周期。
 
 **Tech Stack:** TypeScript project references, Cordis/Typert Remote, React 18, Vitest + Testing Library, existing `VtScreen`, existing CSS modules, pnpm.
 
-**Spec:** `docs/superpowers/specs/2026-09-03-spatial-agent-desktop-design.md`
+**设计规范：** `docs/superpowers/specs/2026-09-03-spatial-agent-desktop-design.md`
 
-## Global Constraints
+## 全局约束
 
 - Keep Harness conversation, approvals, settings, workspace, skills, plugins, and details surfaces intact.
 - Terminal access is owner-scoped to an exact live Session/Agent.
@@ -24,7 +24,7 @@ English | [中文](2026-09-03-terminal-pty-vertical-slice.zh.md)
 
 ---
 
-### Task 1: Expose a narrow Client terminal capability
+### 任务 1：暴露窄 Client 终端能力
 
 **Files:**
 - Modify: `packages/api/session-controller/src/client/sessions/remotes.ts`
@@ -104,7 +104,7 @@ git add packages/api/session-controller/src/client/sessions/remotes.ts packages/
 git commit -m "feat: expose owner-scoped terminal client capability"
 ```
 
-### Task 2: Build the interactive VT terminal pane
+### 任务 2：构建交互式 VT 终端面板
 
 **Files:**
 - Create: `packages/client/ui-layout/src/client/TerminalPane.tsx`
@@ -168,7 +168,7 @@ git add packages/client/ui-layout/src/client/TerminalPane.tsx packages/client/ui
 git commit -m "feat: add interactive VT terminal pane"
 ```
 
-### Task 3: Integrate terminal creation and conversation preservation into the spatial frame
+### 任务 3：将终端创建和对话保留集成到空间外壳
 
 **Files:**
 - Modify: `packages/client/ui-layout/src/client/index.ts`
@@ -225,7 +225,7 @@ git add packages/client/ui-layout/src/client/index.ts packages/client/ui-layout/
 git commit -m "feat: integrate terminals into spatial agent shell"
 ```
 
-### Task 4: Add the thin Tauri 2 desktop shell and release matrix
+### 任务 4：添加轻量 Tauri 2 桌面外壳和发布矩阵
 
 **Files:**
 - Create: `src-tauri/Cargo.toml`
@@ -273,7 +273,7 @@ git add src-tauri package.json .github/workflows/release-tauri.yml docs/release/
 git commit -m "feat: add tauri desktop packaging matrix"
 ```
 
-### Task 5: Verify the complete vertical slice and record remaining release boundaries
+### 任务 5：验证完整垂直切片并记录剩余发布边界
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-03-spatial-agent-desktop-design.md` only for verified status/evidence links.

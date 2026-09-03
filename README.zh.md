@@ -6,6 +6,8 @@ DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的�
 
 它构建于**一切皆插件**的架构之上，由 [Cordis](https://github.com/cordiverse/cordis) 驱动，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512)。
 
+本仓库还包含**空间多智能体外壳**：面向轻量桌面端的界面，可将多个 agent CLI 作为常驻 PTY 会话运行，以自适应网格排列，并通过现有的 session、subagent、plugin 和 Cordis 扩展界面进行协作。
+
 文档：[https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
 
 ## 开发者预览
@@ -43,6 +45,10 @@ pnpm dsh web
 ```
 
 `pnpm run build` 会准备仓库产物。`pnpm dsh web` 会直接使用这些已构建产物，不会重新构建。
+
+## 空间多智能体外壳
+
+空间外壳让智能体终端常驻在应用中，而不是把每个智能体当作独立的浏览器标签页。客户端支持自适应终端网格、聚焦／最大化视图、工作区暂存和所有者作用域的终端控制。底层 PTY 界面通过 `terminal` Remote 命名空间暴露，因此更高层的编排可以在不绕过 Session 所有权的情况下创建、检查、通信、委派、停止和继续智能体工作。
 
 ## 社区与支持
 

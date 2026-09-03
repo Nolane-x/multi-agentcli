@@ -182,7 +182,7 @@ function AgentChrome(props: {
       </header>
       <div className={css.agentBody}>
         {props.terminal !== undefined && (
-          <div className={css.surfaceTabs} role="tablist" aria-label="Agent surfaces">
+          <div className={css.surfaceTabs} role="tablist" aria-label={props.t('spatial.agent.surfaces')}>
             <button
               type="button"
               className={css.surfaceTab}
@@ -190,7 +190,7 @@ function AgentChrome(props: {
               aria-selected={surface === 'terminal'}
               onClick={() => { setSurface('terminal') }}
             >
-              Terminal
+              {props.t('spatial.agent.terminal')}
             </button>
             <button
               type="button"
@@ -199,7 +199,7 @@ function AgentChrome(props: {
               aria-selected={surface === 'conversation'}
               onClick={() => { setSurface('conversation') }}
             >
-              Harness chat
+              {props.t('spatial.agent.harnessChat')}
             </button>
           </div>
         )}
@@ -585,13 +585,13 @@ export function AppFrame({
             <button
               type="button"
               className={css.createTerminal}
-              aria-label="Create terminal"
-              title="Create terminal"
+              aria-label={t('spatial.agent.createTerminal')}
+              title={t('spatial.agent.createTerminal')}
               disabled={currentSession === undefined}
               onClick={createTerminal}
             >
               <span aria-hidden="true">+</span>
-              <span>Create terminal</span>
+              <span>{t('spatial.agent.createTerminal')}</span>
             </button>
           </div>
         )}
@@ -638,6 +638,7 @@ export function AppFrame({
                       <TerminalPane
                         sessionId={id}
                         terminal={terminal}
+                        t={t}
                         {...summary?.cwd === undefined ? {} : { cwd: summary.cwd }}
                         onClosed={() => { closeTerminal(id) }}
                       />

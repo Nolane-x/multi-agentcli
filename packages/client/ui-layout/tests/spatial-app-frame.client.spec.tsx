@@ -44,6 +44,42 @@ function sessionState(
   }
 }
 
+function translate(key: string, params?: Record<string, unknown>): string {
+  const messages: Record<string, string> = {
+    'spatial.agent.live': 'LIVE',
+    'spatial.agent.open': 'Open {name}',
+    'spatial.agent.working': 'working',
+    'spatial.agent.ready': 'ready',
+    'spatial.agent.returnToMosaic': 'Return to agent mosaic',
+    'spatial.agent.focus': 'Focus this agent',
+    'spatial.agent.returnToMosaicTitle': 'Return to mosaic (Esc)',
+    'spatial.agent.focusTitle': 'Focus agent',
+    'spatial.agent.backgroundWorking': 'agent is working in the background',
+    'spatial.agent.backgroundReady': 'agent is ready',
+    'spatial.agent.openToContinue': 'Open this agent to continue the full Harness session.',
+    'spatial.agent.enter': 'Enter agent',
+    'spatial.agent.lead': 'LEAD',
+    'spatial.agent.child': 'CHILD',
+    'spatial.agent.oneShotAria': '{label}, one-shot subagent {status}',
+    'spatial.agent.oneShot': 'ONE-SHOT',
+    'spatial.agent.via': 'via {name}',
+    'spatial.agent.stopping': 'stopping',
+    'spatial.agent.status.running': 'running',
+    'spatial.agent.status.completed': 'completed',
+    'spatial.agent.status.killed': 'killed',
+    'spatial.agent.status.failed': 'failed',
+    'spatial.agent.stoppingLabel': 'Stopping {name}',
+    'spatial.agent.stopLabel': 'Stop {name}',
+    'spatial.agent.stopRequested': 'Stop requested',
+    'spatial.agent.stopOneShot': 'Stop one-shot agent',
+    'spatial.agent.delegatedBy': 'delegated by {name}',
+    'spatial.agent.executionActive': 'One-shot subagent execution is active.',
+    'spatial.agent.job': 'job:{id}',
+    'spatial.agent.agent': 'Agent',
+  }
+  return (messages[key] ?? key).replace(/\{(\w+)\}/gu, (_match, name: string) => String(params?.[name] ?? `{${name}}`))
+}
+
 function mountSpatialFrame(
   count = 5,
   jobsBySession: SessionListState['jobsBySession'] = {},
@@ -78,7 +114,7 @@ function mountSpatialFrame(
       SessionScope={SessionScope}
       openAgent={openAgent}
       stageAgent={stageAgent}
-      t={key => key}
+      t={translate}
     />,
   )
   return { ...view, openAgent, stageAgent, state }

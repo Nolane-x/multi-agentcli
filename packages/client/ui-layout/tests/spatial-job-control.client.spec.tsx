@@ -13,6 +13,16 @@ class ResizeObserverStub {
   disconnect(): void {}
 }
 
+function translate(key: string, params?: Record<string, unknown>): string {
+  if (key === 'spatial.agent.stopLabel') return `Stop ${String(params?.name)}`
+  if (key === 'spatial.agent.stoppingLabel') return `Stopping ${String(params?.name)}`
+  if (key === 'spatial.agent.status.running') return 'running'
+  if (key === 'spatial.agent.oneShot') return 'ONE-SHOT'
+  if (key === 'spatial.agent.oneShotAria') return `${String(params?.label)} one-shot subagent ${String(params?.status)}`
+  if (key === 'spatial.agent.delegatedBy') return `delegated by ${String(params?.name)}`
+  return key
+}
+
 function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapshot: () => T }) {
   return function useSelector<S>(sel: (s: T) => S): S {
     return sel(useSyncExternalStore(inst.subscribe, inst.getSnapshot))
@@ -86,7 +96,7 @@ describe('spatial one-shot agent control', () => {
         openAgent={openAgent}
         stageAgent={stageAgent}
         stopAgentJob={stopAgentJob}
-        t={key => key}
+        t={translate}
       />,
     )
 

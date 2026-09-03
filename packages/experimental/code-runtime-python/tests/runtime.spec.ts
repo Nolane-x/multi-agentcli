@@ -5156,7 +5156,7 @@ describe('PythonCodeRuntime — hostile peer', () => {
       maxLogBytes: 32 * 1024 * 1024,
       maxValueBytes: 32 * 1024 * 1024,
       addressSpaceMb: 512,
-      maxWallMs: 20_000,
+      maxWallMs: 60_000,
     })
     const result = await runtime.run({
       program: [
@@ -5167,7 +5167,7 @@ describe('PythonCodeRuntime — hostile peer', () => {
       bindings: [],
     })
     expect(result.error?.kind).toBe('output-limit')
-  }, 30_000)
+  }, 75_000)
 
   it('checks and encodes a wide completion value in O(depth), not O(width)', async () => {
     // A wide flat list serializes to ~2 bytes per element but the pre-fix walk

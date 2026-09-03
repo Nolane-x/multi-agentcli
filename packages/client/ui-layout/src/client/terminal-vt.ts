@@ -8,6 +8,7 @@
 
 export type TerminalColor = number | `#${string}`
 
+/** One rendered terminal cell and its VT rendition attributes. */
 export interface TerminalCell {
   readonly text: string
   readonly bold: boolean
@@ -19,6 +20,7 @@ export interface TerminalCell {
   readonly background: TerminalColor | undefined
 }
 
+/** Immutable visible state returned by a terminal screen snapshot. */
 export interface TerminalScreenSnapshot {
   readonly rows: readonly string[]
   readonly cursor: {
@@ -29,6 +31,7 @@ export interface TerminalScreenSnapshot {
   readonly alternate: boolean
 }
 
+/** Browser-safe stateful VT screen operations used by a terminal pane. */
 export interface TerminalScreen {
   write(data: string): void
   resize(rows: number, cols: number): void
@@ -522,7 +525,12 @@ function assertGeometry(rows: number, cols: number): void {
   }
 }
 
-/** Create one stateful VT screen model. */
+/**
+ * Create one stateful VT screen model.
+ * @param rows Initial visible row count.
+ * @param cols Initial visible column count.
+ * @returns A stateful browser-safe VT screen.
+ */
 export function createTerminalScreen(rows: number, cols: number): TerminalScreen {
   return new VtScreen(rows, cols)
 }

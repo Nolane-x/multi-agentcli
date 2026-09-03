@@ -6,6 +6,20 @@ import type { TerminalOutputFrame } from '@deepseek-ai/dsh-api-session-controlle
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { TerminalPane } from '@deepseek-ai/dsh-client-ui-layout/src/client/TerminalPane.tsx'
 
+const t = (key: string): string => ({
+  'spatial.agent.pane': 'Terminal pane',
+  'spatial.agent.startingTerminal': 'Starting terminal',
+  'spatial.agent.closedTerminal': 'Terminal closed',
+  'spatial.agent.agentTerminal': 'Agent terminal',
+  'spatial.agent.stopTerminal': 'Stop terminal',
+  'spatial.agent.closeTerminal': 'Close terminal',
+  'spatial.agent.stop': 'Stop',
+  'spatial.agent.close': 'Close',
+  'spatial.agent.output': 'Terminal output',
+  'spatial.agent.input': 'Terminal input',
+  'spatial.agent.unavailable': 'Terminal unavailable',
+}[key] ?? key)
+
 function fakeTerminal() {
   const writes: string[] = []
   return {
@@ -40,7 +54,7 @@ describe('TerminalPane', () => {
   it('opens an owner-scoped PTY, paints VT output, and forwards keyboard input', async () => {
     const terminal = fakeTerminal()
     const { getByLabelText, getByRole } = render(
-      <TerminalPane sessionId={'s-terminal' as never} terminal={terminal} />,
+      <TerminalPane sessionId={'s-terminal' as never} terminal={terminal} t={t} />,
     )
 
     await waitFor(() => { expect(getByRole('region', { name: 'Terminal output' }).textContent).toContain('agent$') })
@@ -56,7 +70,7 @@ describe('TerminalPane', () => {
     const terminal = fakeTerminal()
     const onClosed = vi.fn()
     const { getByRole, queryByRole } = render(
-      <TerminalPane sessionId={'s-terminal' as never} terminal={terminal} onClosed={onClosed} />,
+      <TerminalPane sessionId={'s-terminal' as never} terminal={terminal} t={t} onClosed={onClosed} />,
     )
 
     await waitFor(() => { expect(getByRole('button', { name: 'Close terminal' })).toBeTruthy() })

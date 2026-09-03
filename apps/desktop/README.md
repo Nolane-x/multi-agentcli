@@ -1,5 +1,7 @@
 # DSH Spatial Desktop
 
+English | [中文](README.zh.md)
+
 This is the thin Tauri shell for the spatial Harness surface. The packaged
 frontend is the same `apps/web` worker preview bundle, so the desktop build
 does not require a `DEEPSEEK_API_KEY` just to launch. The existing Harness

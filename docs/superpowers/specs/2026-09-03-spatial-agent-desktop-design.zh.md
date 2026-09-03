@@ -1,14 +1,14 @@
-# Spatial Agent Desktop — architecture and interaction design
+# 空间智能体桌面端 — 架构与交互设计
 
-English | [中文](2026-09-03-spatial-agent-desktop-design.zh.md)
+[English](2026-09-03-spatial-agent-desktop-design.md) | 中文
 
-Status: design review required before implementation
+状态：实现前需要完成设计评审
 
-## Objective
+## 目标
 
 Turn the existing DeepSeek Harness application into a lightweight multi-agent workbench. The application keeps Harness runtime capabilities and replaces the single-session presentation with a persistent left rail and a centered, balanced mosaic of agent-owned interactive terminals. The first implementation milestone is web-compatible and becomes the renderer used by a Tauri desktop shell.
 
-## Raw request preserved
+## 保留的原始需求
 
 - Keep the capabilities of DeepSeek Harness, including plugins and plugin creation, workspace selection, agent operation, and existing Harness surfaces.
 - Replace the original main presentation with a small floating bar on the left.
@@ -20,22 +20,22 @@ Turn the existing DeepSeek Harness application into a lightweight multi-agent wo
 - Keep the product light, fast to open, smooth, and releasable for Windows, Linux/Ubuntu, and macOS.
 - Syncing upstream Harness must remain possible without replacing local shell ownership.
 
-## UI contract
+## UI 契约
 
-### Primary user outcomes
+### 主要用户目标
 
 1. A developer can select a working directory, create an agent terminal, type into it, observe live output, resize it, stop it, and create another one.
 2. A developer can scan several agents at once, identify the lead and lineage, see active subagent jobs, and open or focus an agent without changing which Harness session is authoritative.
 3. A developer can use existing conversation, approvals, settings, workspace, plugin, skill, and details surfaces from the rail or an agent scope.
 4. A developer can run the same frontend in a browser during development and inside Tauri in production, with the same terminal/session contracts.
 
-### Actors
+### 参与者
 
 - Primary: an expert developer supervising several coding agents under time pressure.
 - Secondary: an agent operating through an approved terminal/provider profile; it may request more agents but does not silently gain a new authority scope.
 - Affected users: keyboard-first users, users with reduced motion, and users relying on screen readers or high contrast.
 
-### Authorities
+### 权威与约束
 
 | Statement | Level | Source |
 | --- | --- | --- |
@@ -45,7 +45,7 @@ Turn the existing DeepSeek Harness application into a lightweight multi-agent wo
 | Tauri wraps the Vite frontend and builds platform installers. | implementation | Official Tauri v2 documentation consulted through Context7 |
 | Provider commands need explicit profiles and permission boundaries. | security constraint | Product risk analysis; no arbitrary implicit command launch |
 
-### Surface scope
+### 界面范围
 
 Included in the first product sequence:
 
@@ -63,7 +63,7 @@ Excluded from this design:
 - Silent arbitrary command execution, privilege escalation, or a provider being able to escape its owner/session boundary.
 - Claiming signed production installers before signing identities and release credentials exist.
 
-### Fidelity and experiential intent
+### 一致性与体验意图
 
 Fidelity is design-system consistent with the existing Harness application, while the presentation is intentionally spatial and operational rather than a faithful copy of the original single-session screen.
 
@@ -74,7 +74,7 @@ The user’s desired feeling is a capable, free-flowing agent workspace that is 
 - speed: no new heavyweight terminal runtime is required for the first slice, bounded output queues, and no decorative animation in the hot path;
 - mastery: persistent lead/lineage/status cues and predictable keyboard focus.
 
-### Success observables
+### 可验证的成功标准
 
 - 5 sessions render five real scoped conversation surfaces and use 33.333% tile geometry; 1–4 sessions use the 2x2 geometry.
 - A created terminal receives PTY output, accepts exact input including control sequences, sends positive row/column resize, and detaches output observers without killing the PTY when a tile is unmounted.
@@ -85,9 +85,9 @@ The user’s desired feeling is a capable, free-flowing agent workspace that is 
 - `pnpm run typecheck`, targeted terminal/spatial tests, and relevant static gates pass without a DeepSeek API key.
 - Tauri packaging is a separate release gate with matrix artifacts for Windows, macOS, and Linux/Ubuntu; packaging failure does not weaken web/core tests.
 
-## Architecture
+## 架构
 
-### Ownership boundaries
+### 所有权边界
 
 ```text
 Harness session/agent runtime
@@ -103,7 +103,7 @@ Harness session/agent runtime
 
 The terminal Remote remains a dedicated namespace. `ui-layout` consumes a narrow client capability rather than reaching into the registry or generated Remote implementation. The UI owns presentation state (focused tile, rail width, pane geometry); the Session and terminal domains own process state, authorization, cancellation, and cleanup.
 
-### Sub-project sequence
+### 子项目顺序
 
 1. **Interactive terminal vertical slice** — client terminal capability, React terminal pane around `VtScreen`, PTY stream lifecycle, input/resize/ close controls, and tests. This is the immediate implementation target.
 2. **Spatial shell integration** — replace conversation-only tile bodies with a terminal-first surface plus a compact Harness chat/inspector affordance; preserve all existing slots and rail behavior.
@@ -113,7 +113,7 @@ The terminal Remote remains a dedicated namespace. `ui-layout` consumes a narrow
 
 Independent release claims are allowed per sub-project; the whole product is not complete until all five have evidence.
 
-## Interaction contract
+## 交互契约
 
 | Action | Preconditions | Feedback and result | Cancellation/recovery |
 | --- | --- | --- | --- |
@@ -127,27 +127,27 @@ Independent release claims are allowed per sub-project; the whole product is not
 
 Keyboard remains a first-class path: create terminal, focus next/previous tile, enter focus mode, Escape restore, and terminal input must be discoverable from visible controls as well as shortcuts. Dragging rail/details retains a keyboard or settings-based width path. Reduced motion uses instant or opacity changes while preserving the state cue.
 
-## Provider and security decisions
+## 提供方与安全决策
 
 - A provider profile contains an id, display name, executable resolution rule, argument template, environment policy, working-directory policy, capability label, and availability state. User-entered command text is not treated as a trusted provider definition.
 - The server resolves and launches providers; the browser can request only a registered profile. The profile’s process remains owned by the exact Agent.
 - A provider may request a child agent through a typed Session/job operation; creating a process or changing the owner is never inferred from terminal output or generated UI.
 - Local shell terminal support and UI tests must use fakes/fixtures or registered test backends. Real Claude/Codex/DeepSeek credentials are optional integration tests and never CI prerequisites.
 
-## Constraints and open facts
+## 约束与开放事实
 
-### Safe defaults
+### 安全默认值
 
 - Use the current `VtScreen` implementation for the first pane instead of adding a heavyweight terminal emulator dependency.
 - Keep conversation available as a secondary view/action inside each agent tile rather than removing it.
 - Use Tauri 2 as a thin shell; keep terminal/session truth in the existing TypeScript Host/Client architecture.
 
-### Design hypotheses
+### 设计假设
 
 - A terminal-first tile with an on-demand conversation drawer will preserve Harness capability while making the spatial workbench legible at 9 panes.
 - A compact provider/status line plus persistent lead/lineage marker is enough orientation without adding a second dashboard.
 
-### Blocking unknowns to resolve during implementation
+### 实现期间需要解决的阻塞性未知项
 
 | Unknown | Materiality | Disposition |
 | --- | --- | --- |
@@ -157,7 +157,7 @@ Keyboard remains a first-class path: create terminal, focus next/previous tile, 
 | Existing UI-reference V12 execution contract | high for material UI generation | BLOCKED in this environment: required `external_ui_execution.py` and manifests are not installed; do not claim reference-backed design evidence |
 | Code-signing/notarization identities | release | Keep artifacts unsigned/draft until supplied by release owner |
 
-## NUI/bootstrap record
+## NUI/引导记录
 
 - Evidence class: `ARTIFACT_WORK`.
 - Task profile checksum inputs: multi-agent desktop shell; keyboard/pointer; agentic + multi-agent; streaming/realtime/background jobs; desktop/web; privacy/security-sensitive process control; dense scanning; direct manipulation and async cancellation; no external UI source requested.
@@ -167,6 +167,6 @@ Keyboard remains a first-class path: create terminal, focus next/previous tile, 
 - `reference_posture`: `BLOCKED` (V12.1 execution script and manifests absent).
 - Omission declaration: no external UI library adoption, no screenshot fidelity claim, no empirical usability claim, no platform installer claim until the relevant runtime evidence exists.
 
-## Review gate
+## 评审门槛
 
 This document is the architectural/design proposal for the approved Tauri direction. Implementation begins after review of the five sub-project boundary, the terminal-first tile decision, and the provider-profile security boundary.
