@@ -89,6 +89,25 @@ describe('npm resolution benchmark', () => {
     })
   })
 
+  it('does not expose private workspace manifests as registry packages', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-npm-private-registry-'))
+    roots.push(root)
+    writeJson(root, 'apps/desktop/package.json', {
+      name: '@deepseek-ai/dsh-desktop',
+      version: '0.1.2-alpha.4',
+      private: true,
+    })
+    writeJson(root, 'apps/cli/package.json', {
+      name: '@deepseek-ai/dsh',
+      version: '0.1.2-alpha.5',
+    })
+
+    const index = buildRegistryIndex(root)
+
+    expect(index.has('@deepseek-ai/dsh-desktop')).toBe(false)
+    expect(index.get('@deepseek-ai/dsh')?.has('0.1.2-alpha.5')).toBe(true)
+  })
+
   it('runs npm against the local registry without requesting an archive', async () => {
     const index: RegistryIndex = new Map([[
       '@deepseek-ai/dsh',
