@@ -11,13 +11,14 @@
  * resizes are driven through the ResizeObserver stub.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
 import { AppFrame } from '@deepseek-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
 import type { AppFrameProps } from '@deepseek-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
 import { SIDEBAR_COLLAPSED } from '@deepseek-ai/dsh-client-ui-layout/src/client/columns.ts'
 import { createLayoutStore } from '@deepseek-ai/dsh-client-ui-layout/src/client/stores.ts'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { TerminalSessionClient } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
@@ -54,7 +55,7 @@ function hookOf<T>(inst: { subscribe: (fn: () => void) => () => void; getSnapsho
   return function useSelector<S>(sel: (s: T) => S): S { return sel(useSyncExternalStore(inst.subscribe, inst.getSnapshot)) }
 }
 
-function mountFrame() {
+function mountFrame(terminal?: TerminalSessionClient) {
   window.innerWidth = frameWidth // first-render viewport source before the observer fires
   const instance = createLayoutStore().create()
   const slotCalls: { key: string; props: unknown }[] = []
@@ -100,6 +101,7 @@ function mountFrame() {
       useSessionPendingInteraction={useSessionPendingInteraction}
       useWorkspaces={((sel: (s: WorkspaceSnapshot) => unknown) => sel(workspaceState)) as never}
       SessionProvider={SessionProviderStub}
+      terminal={terminal}
       t={key => key === 'brand.localBuild' ? 'DSH Local Build' : key}
     />
   )
@@ -153,6 +155,28 @@ afterEach(() => {
 })
 
 describe('AppFrame', () => {
+  it('creates an owner-scoped terminal from the persistent rail control', async () => {
+    const terminal: TerminalSessionClient = {
+      backends: vi.fn(async () => ({ ok: true as const, value: { items: ['shell'] } })),
+      list: vi.fn(async () => ({ ok: true as const, value: { items: [] } })),
+      open: vi.fn(async () => ({
+        ok: true as const,
+        value: { terminalId: 'pty-integration', type: 'shell', status: { kind: 'running' as const }, motd: 'ready' },
+      })),
+      output: vi.fn(async function* () { yield { data: 'agent$ ' } }),
+      write: vi.fn(async () => ({ ok: true as const, value: undefined })),
+      resize: vi.fn(async () => ({ ok: true as const, value: undefined })),
+      signal: vi.fn(async () => ({ ok: true as const, value: { delivered: true as const, targetPgid: 1 } })),
+      close: vi.fn(async () => ({ ok: true as const, value: { closed: true } })),
+    }
+    const { getByRole, container } = mountFrame(terminal)
+
+    fireEvent.click(getByRole('button', { name: 'Create terminal' }))
+    await act(async () => { await vi.runAllTimersAsync() })
+    expect(container.querySelector('[data-terminal-id="pty-integration"]')).toBeTruthy()
+    expect(terminal.open).toHaveBeenCalledWith('s-test', { type: 'shell' }, expect.any(AbortSignal))
+  })
+
   it('localizes the product title when the build does not supply one', () => {
     mountFrame()
     expect(document.title).toBe('DSH Local Build')

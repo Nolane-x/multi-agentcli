@@ -28,6 +28,7 @@ import type { RemoteFailure, RemoteResult } from '@deepseek-ai/dsh-typert-protoc
 import type { SessionEventSource } from '../contract/events.ts'
 import type { SessionFace } from '../contract/session.ts'
 import type { AgentContext, ISessions } from '../contract/sessions.ts'
+import { createTerminalSessionClient, type TerminalSessionClient } from '../terminal-session.ts'
 import { createScope, scopeOf as scopeTagOf } from '../scope.ts'
 import { SessionManager } from './manager.ts'
 import type { SessionRemotes } from './remotes.ts'
@@ -186,6 +187,8 @@ export class ClientSessions implements ISessions {
    * reports the same number.
    */
   readonly searchResultLimit = SESSION_SEARCH_RESULT_LIMIT
+  /** Owner-addressed terminal capability shared by all UI consumers. */
+  readonly terminal?: TerminalSessionClient
   /** List snapshot store (list RPC + host stream increments; re-pulled on reconnect) — the useSessions standard feed, current included. */
   readonly list: SnapshotStore<SessionListState>
   /** The object-layer instance cluster and frame dispatch entry. */
@@ -221,6 +224,7 @@ export class ClientSessions implements ISessions {
     private readonly rootCtx: Context,
     remote: SessionRemotes,
   ) {
+    if (remote.terminal) this.terminal = createTerminalSessionClient(remote.terminal)
     this.selection = createSnapshotStore<SessionSelection>(
       {},
       { persist: { name: 'dsh.sessions.current' } })

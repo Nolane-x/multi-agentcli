@@ -24,6 +24,8 @@ export type {
 } from './transport.ts'
 export { createScope, scopeOf } from './scope.ts'
 export type { AgentContext, AgentScopeHandle } from './scope.ts'
+export { createTerminalSessionClient } from './terminal-session.ts'
+export type { TerminalSessionClient } from './terminal-session.ts'
 export { SessionCreateError, SessionForkError } from './sessions/service.ts'
 export type { SessionBinding, SessionListState, SessionSummary } from './sessions/service.ts'
 export type {
@@ -89,11 +91,14 @@ export const inject = [
  * where the generated Session Remote is already an explicit dependency.
  */
 class RuntimeClientSessions extends ClientSessions {
+  private readonly runtimeRemotes: SessionRemotes
+
   constructor(
     ctx: Context,
-    private readonly runtimeRemotes: SessionRemotes,
+    runtimeRemotes: SessionRemotes,
   ) {
     super(ctx, runtimeRemotes)
+    this.runtimeRemotes = runtimeRemotes
   }
 
   /**

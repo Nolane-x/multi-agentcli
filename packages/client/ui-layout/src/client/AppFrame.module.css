@@ -52,6 +52,57 @@
     inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
 }
 
+.railControls {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
+  z-index: 2;
+}
+
+.createTerminal {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 16%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 7%, transparent);
+  color: var(--dsw-alias-label-primary);
+  font: 600 10px/1 var(--ds-font-family-code);
+  cursor: pointer;
+}
+
+.createTerminal:hover,
+.createTerminal:focus-visible {
+  border-color: color-mix(in srgb, #68d6a7 48%, transparent);
+  background: color-mix(in srgb, #68d6a7 11%, transparent);
+  outline: none;
+}
+
+.createTerminal > span:first-child {
+  color: #68d6a7;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 12px;
+}
+
+.createTerminal:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.frame[data-sidebar-collapsed] .createTerminal > span:last-child {
+  display: none;
+}
+
+.frame[data-sidebar-collapsed] .createTerminal {
+  padding: 0;
+}
+
 /* Full-screen spatial canvas. The left inset protects the always-visible rail;
    an expanded rail intentionally overlays the canvas as a temporary drawer. */
 .centerCol {
@@ -336,6 +387,37 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
+}
+
+.surfaceTabs {
+  flex: none !important;
+  display: flex;
+  gap: 4px;
+  padding: 7px 10px 0;
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 18%, transparent);
+}
+
+.surfaceTab {
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  font: 600 9px/1.2 var(--ds-font-family-code);
+  cursor: pointer;
+}
+
+.surfaceTab[aria-selected='true'] {
+  border-color: color-mix(in srgb, var(--dsw-alias-border-l2) 78%, transparent);
+  border-bottom-color: transparent;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+}
+
+.surfaceTab:hover,
+.surfaceTab:focus-visible {
+  color: var(--dsw-alias-label-primary);
+  outline: none;
 }
 
 .agentPreviewBody {

@@ -6,6 +6,7 @@
  * the real Harness runtime rather than DOM automation or implementation casts.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { TerminalSessionClient } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
@@ -78,6 +79,7 @@ export const inject = ['slots', 'theme', 'locale', 'sessions', 'uiRenderer']
 
 type SpatialSessionsContext = ClientContext & {
   sessions: {
+    terminal?: TerminalSessionClient
     open: (sessionId: SessionIdOf) => void
     stage: (sessionId: SessionIdOf) => void
     stopJob: (sessionId: SessionIdOf, jobId: string) => Promise<boolean>
@@ -128,6 +130,7 @@ export function apply(ctx: ClientContext): void {
           stopAgentJob: (sessionId: SessionIdOf, jobId: string) => (
             sessions.stopJob(sessionId, jobId)
           ),
+          terminal: sessions.terminal,
         }
       },
     }, AppFrame)

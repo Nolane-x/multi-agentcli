@@ -14,6 +14,7 @@ import type { SessionSearchResultItem } from '../sessions/manager.ts'
 import type { SessionBinding, SessionListState } from '../sessions/service.ts'
 import type { SessionFace } from './session.ts'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type { TerminalSessionClient } from '../terminal-session.ts'
 
 export type { AgentContext } from '../scope.ts'
 
@@ -27,6 +28,8 @@ export interface ISessions {
    * (fixture included) reports the same number.
    */
   readonly searchResultLimit: number
+  /** Explicit Session-addressed PTY operations for terminal surfaces. */
+  readonly terminal?: TerminalSessionClient
   /**
    * Create or adopt a Session on the Host.
    * @param opts - target workspace, directory, and optional preallocated identity.

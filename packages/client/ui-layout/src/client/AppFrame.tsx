@@ -17,8 +17,10 @@ import {
 import type {
   PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore, SessionIdOf,
 } from '@deepseek-ai/dsh-client-ui-slots'
+import type { TerminalSessionClient } from '@deepseek-ai/dsh-api-session-controller/client'
 import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
+import { TerminalPane } from './TerminalPane.tsx'
 import {
   canvasAgentIds, canvasSubagentJobs, mosaicCellPercent, mosaicDimension, spatialAgentLineage,
 } from './spatial.ts'
@@ -42,6 +44,8 @@ interface SpatialAgentActions {
   stageAgent?: (sessionId: SessionIdOf) => void
   /** Request cancellation of an owner-fenced one-shot background job. */
   stopAgentJob?: (ownerId: SessionIdOf, jobId: string) => Promise<boolean>
+  /** Owner-addressed PTY capability supplied by the Session Controller. */
+  terminal?: TerminalSessionClient
 }
 
 /** Full composed props: runtime share + child-slot render share + store share. */
@@ -101,9 +105,14 @@ function AgentChrome(props: {
   parentTitle?: string
   onOpen?: () => void
   onToggleFocus?: () => void
+  terminal?: ReactNode
   children?: ReactNode
   style?: CSSProperties
 }) {
+  const [surface, setSurface] = useState<'terminal' | 'conversation'>('conversation')
+  useEffect(() => {
+    setSurface(props.terminal === undefined ? 'conversation' : 'terminal')
+  }, [props.terminal])
   const sessionMeta = props.cwd ?? `session:${String(props.id).slice(0, 12)}`
   const relationMeta = props.parentTitle === undefined
     ? sessionMeta
@@ -172,7 +181,29 @@ function AgentChrome(props: {
         </div>
       </header>
       <div className={css.agentBody}>
-        {props.children ?? (
+        {props.terminal !== undefined && (
+          <div className={css.surfaceTabs} role="tablist" aria-label="Agent surfaces">
+            <button
+              type="button"
+              className={css.surfaceTab}
+              role="tab"
+              aria-selected={surface === 'terminal'}
+              onClick={() => { setSurface('terminal') }}
+            >
+              Terminal
+            </button>
+            <button
+              type="button"
+              className={css.surfaceTab}
+              role="tab"
+              aria-selected={surface === 'conversation'}
+              onClick={() => { setSurface('conversation') }}
+            >
+              Harness chat
+            </button>
+          </div>
+        )}
+        {surface === 'terminal' && props.terminal !== undefined ? props.terminal : props.children ?? (
           <div className={css.agentPreviewBody}>
             <div className={css.previewTerminalLine}>
               <span className={css.promptGlyph}>›</span>
@@ -322,12 +353,13 @@ export function AppFrame({
   openAgent,
   stageAgent,
   stopAgentJob,
+  terminal,
   t,
 }: AppFrameProps) {
   const panels = useStore(s => s)
   const sessionIds = useSessions(s => s.ids)
   const sessionsById = useSessions(s => s.byId)
-  const jobsBySession = useSessions(s => s.jobsBySession)
+  const jobsBySession = useSessions(s => s.jobsBySession) ?? {}
   const currentSession = useSessions(s => s.current)
   const detailsSession = useSessions((s) => {
     const current = s.current
@@ -351,12 +383,40 @@ export function AppFrame({
   )
   const [focusedAgent, setFocusedAgent] = useState<SessionIdOf | undefined>()
   const [stopRequestedJobs, setStopRequestedJobs] = useState<Set<string>>(() => new Set())
+  const [terminalAgentIds, setTerminalAgentIds] = useState<Set<SessionIdOf>>(() => new Set())
   const focusedVisible = focusedAgent !== undefined && activeAgentIds.includes(focusedAgent)
   const displayedAgentIds = focusedVisible ? [focusedAgent] : activeAgentIds
   const displayedSubagentJobs = focusedVisible ? [] : activeSubagentJobs
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
   const stagedAgents = useRef(new Set<SessionIdOf>())
+
+  const createTerminal = useCallback(() => {
+    if (terminal === undefined || currentSession === undefined) return
+    setTerminalAgentIds((previous) => {
+      if (previous.has(currentSession)) return previous
+      const next = new Set(previous)
+      next.add(currentSession)
+      return next
+    })
+  }, [currentSession, terminal])
+
+  const closeTerminal = useCallback((sessionId: SessionIdOf) => {
+    setTerminalAgentIds((previous) => {
+      if (!previous.has(sessionId)) return previous
+      const next = new Set(previous)
+      next.delete(sessionId)
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    const live = new Set(activeAgentIds)
+    setTerminalAgentIds((previous) => {
+      const next = new Set([...previous].filter(id => live.has(id)))
+      return next.size === previous.size ? previous : next
+    })
+  }, [activeAgentIds])
 
   const requestJobStop = useCallback((ownerId: SessionIdOf, jobId: string) => {
     if (stopAgentJob === undefined) return
@@ -520,6 +580,21 @@ export function AppFrame({
           collapsed: sidebarCollapsed,
           width: cols.sidebar,
         })}
+        {terminal !== undefined && (
+          <div className={css.railControls}>
+            <button
+              type="button"
+              className={css.createTerminal}
+              aria-label="Create terminal"
+              title="Create terminal"
+              disabled={currentSession === undefined}
+              onClick={createTerminal}
+            >
+              <span aria-hidden="true">+</span>
+              <span>Create terminal</span>
+            </button>
+          </div>
+        )}
       </div>
 
       <CenterColumn rightInset={rightInset}>
@@ -558,6 +633,16 @@ export function AppFrame({
                   depth={lineage.depth}
                   {...lineage.parentId === undefined ? {} : { parentId: lineage.parentId }}
                   {...parentTitle === undefined ? {} : { parentTitle }}
+                  {...terminal !== undefined && terminalAgentIds.has(id) ? {
+                    terminal: (
+                      <TerminalPane
+                        sessionId={id}
+                        terminal={terminal}
+                        {...summary?.cwd === undefined ? {} : { cwd: summary.cwd }}
+                        onClosed={() => { closeTerminal(id) }}
+                      />
+                    ),
+                  } : {}}
                   style={tileStyle}
                   onToggleFocus={() => { setFocusedAgent(value => value === id ? undefined : id) }}
                   {...!current && openAgent !== undefined ? { onOpen: () => { openAgent(id) } } : {}}
