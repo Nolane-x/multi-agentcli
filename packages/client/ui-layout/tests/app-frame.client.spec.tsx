@@ -85,6 +85,7 @@ function mountFrame(terminal?: TerminalSessionClient) {
         },
       current,
       phase: 'ready',
+      jobsBySession: {},
     } as SessionListState
     return sel(sessionState)
   }) as never
@@ -101,7 +102,7 @@ function mountFrame(terminal?: TerminalSessionClient) {
       useSessionPendingInteraction={useSessionPendingInteraction}
       useWorkspaces={((sel: (s: WorkspaceSnapshot) => unknown) => sel(workspaceState)) as never}
       SessionProvider={SessionProviderStub}
-      terminal={terminal}
+      {...terminal === undefined ? {} : { terminal }}
       t={key => key === 'brand.localBuild' ? 'DSH Local Build' : key}
     />
   )
@@ -156,7 +157,7 @@ afterEach(() => {
 
 describe('AppFrame', () => {
   it('creates an owner-scoped terminal from the persistent rail control', async () => {
-    const terminal: TerminalSessionClient = {
+    const terminal = {
       backends: vi.fn(async () => ({ ok: true as const, value: { items: ['shell'] } })),
       list: vi.fn(async () => ({ ok: true as const, value: { items: [] } })),
       open: vi.fn(async () => ({
@@ -168,7 +169,7 @@ describe('AppFrame', () => {
       resize: vi.fn(async () => ({ ok: true as const, value: undefined })),
       signal: vi.fn(async () => ({ ok: true as const, value: { delivered: true as const, targetPgid: 1 } })),
       close: vi.fn(async () => ({ ok: true as const, value: { closed: true } })),
-    }
+    } satisfies TerminalSessionClient
     const { getByRole, container } = mountFrame(terminal)
 
     fireEvent.click(getByRole('button', { name: 'Create terminal' }))

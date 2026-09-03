@@ -19,7 +19,7 @@ function ok<T>(value: T): RemoteResult<T> {
 }
 
 function fakeTerminalRemote() {
-  const remote: SessionTerminalRemote = {
+  const remote = {
     backends: vi.fn(async () => ok({ items: ['shell'] })),
     list: vi.fn(async () => ok<TerminalListValue>({ items: [] })),
     open: vi.fn(async () => ok<TerminalOpenValue>({
@@ -33,7 +33,7 @@ function fakeTerminalRemote() {
     resize: vi.fn(async () => ok(undefined)),
     signal: vi.fn(async () => ok<TerminalSignalValue>({ delivered: true, targetPgid: 11 })),
     close: vi.fn(async () => ok<TerminalCloseValue>({ closed: true })),
-  }
+  } satisfies SessionTerminalRemote
   return remote
 }
 

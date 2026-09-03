@@ -285,7 +285,7 @@ function SubagentJobTile(props: {
             <span>{props.t('spatial.agent.delegatedBy', { name: props.ownerTitle })}</span>
           </div>
           <p>{props.job.detail ?? props.t('spatial.agent.executionActive')}</p>
-          <span className={css.openHint}>{props.t('spatial.agent.job', { id: String(props.job.id).slice(0, 12) })}</span>
+          <span className={css.openHint}>{props.t('spatial.agent.job', { id: props.job.id.slice(0, 12) })}</span>
         </div>
       </div>
     </section>
@@ -359,7 +359,7 @@ export function AppFrame({
   const panels = useStore(s => s)
   const sessionIds = useSessions(s => s.ids)
   const sessionsById = useSessions(s => s.byId)
-  const jobsBySession = useSessions(s => s.jobsBySession) ?? {}
+  const jobsBySession = useSessions(s => s.jobsBySession)
   const currentSession = useSessions(s => s.current)
   const detailsSession = useSessions((s) => {
     const current = s.current

@@ -130,7 +130,7 @@ export function apply(ctx: ClientContext): void {
           stopAgentJob: (sessionId: SessionIdOf, jobId: string) => (
             sessions.stopJob(sessionId, jobId)
           ),
-          terminal: sessions.terminal,
+          ...sessions.terminal === undefined ? {} : { terminal: sessions.terminal },
         }
       },
     }, AppFrame)

@@ -53,6 +53,10 @@ function isRemoteFailure(value: { readonly ok: boolean }): value is { readonly o
   return !value.ok
 }
 
+function isLifecycleActive(value: { readonly active: boolean }): boolean {
+  return value.active
+}
+
 /** Render one live terminal owned by {@link sessionId}. */
 export function TerminalPane(props: TerminalPaneProps) {
   const screenRef = useRef<TerminalScreen>(createTerminalScreen(DEFAULT_ROWS, DEFAULT_COLS))
@@ -64,8 +68,7 @@ export function TerminalPane(props: TerminalPaneProps) {
 
   useEffect(() => {
     const controller = new AbortController()
-    let active = true
-
+    const lifecycle: { active: boolean } = { active: true }
     void (async () => {
       const backends = await props.terminal.backends()
       if (isRemoteFailure(backends)) throw new Error(errorMessage(backends.error))
@@ -77,7 +80,7 @@ export function TerminalPane(props: TerminalPaneProps) {
         ...(props.cwd === undefined ? {} : { cwd: props.cwd }),
       }, controller.signal)
       if (isRemoteFailure(opened)) throw new Error(errorMessage(opened.error))
-      if (!active) return
+      if (!isLifecycleActive(lifecycle)) return
 
       setTerminalId(opened.value.terminalId)
       screenRef.current.write(opened.value.motd)
@@ -85,18 +88,18 @@ export function TerminalPane(props: TerminalPaneProps) {
       setPhase('running')
 
       for await (const frame of props.terminal.output(props.sessionId, opened.value.terminalId, controller.signal)) {
-        if (!active) return
+        if (!isLifecycleActive(lifecycle)) return
         screenRef.current.write(frame.data)
         setSnapshot(screenRef.current.snapshot())
       }
     })().catch((cause: unknown) => {
-      if (!active || controller.signal.aborted) return
+      if (!lifecycle.active || controller.signal.aborted) return
       setError(errorMessage(cause))
       setPhase('error')
     })
 
     return () => {
-      active = false
+      lifecycle.active = false
       controller.abort()
     }
   }, [props.backend, props.cwd, props.sessionId, props.terminal])

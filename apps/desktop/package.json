@@ -1,0 +1,14 @@
+{
+  "name": "@deepseek-ai/dsh-desktop",
+  "description": "Tauri desktop shell for the spatial DeepSeek Harness workspace",
+  "version": "0.1.2-alpha.4",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.8.4"
+  }
+}
