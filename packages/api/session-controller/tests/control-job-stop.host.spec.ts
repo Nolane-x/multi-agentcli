@@ -3,8 +3,7 @@ import AgentRegistry, { Inbox } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { JobId, JobOutcome } from '@deepseek-ai/dsh-jobs'
 import LocalJobRegistry from '@deepseek-ai/dsh-jobs-local'
-import SessionStore from '@deepseek-ai/dsh-session'
-import type { SessionId } from '@deepseek-ai/dsh-session'
+import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { describe, expect, it, vi } from 'vitest'
 import { SessionControlController } from '../src/control.ts'
@@ -46,5 +45,19 @@ describe('SessionControlController.stopJob', () => {
     expect(control.stopJob(session.id, id)).toBe('requested')
     expect(cancel).toHaveBeenCalledWith('human requested stop')
     expect(ctx.jobs.get(id, agent).status).toBe('stopping')
+  })
+
+  it('fails closed when the jobs service or the exact live owner is absent', async () => {
+    const withoutJobs = new Context()
+    await withoutJobs.plugin(SessionStore)
+    await withoutJobs.plugin(AgentRegistry)
+    await withoutJobs.plugin(SessionProjectionRegistry)
+    const noJobs = new SessionControlController(withoutJobs)
+    expect(() => noJobs.stopJob(SessionId('missing'), 'job-1' as JobId)).toThrow('background jobs unavailable')
+
+    await withoutJobs.plugin(LocalJobRegistry)
+    withoutJobs.jobs.attachController('spatial-human-control')
+    const withJobs = new SessionControlController(withoutJobs)
+    expect(() => withJobs.stopJob(SessionId('missing'), 'job-1' as JobId)).toThrow('is not live')
   })
 })

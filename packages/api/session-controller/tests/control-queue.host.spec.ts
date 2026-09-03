@@ -5,6 +5,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import { SessionControlController } from '../src/control.ts'
 
 async function harness(): Promise<{
@@ -32,6 +33,29 @@ function message(text: string, source: 'user' | 'plugin' = 'user') {
 }
 
 describe('Session control queue projection', () => {
+  it('broadcasts a client-visible projection change to active control streams', async () => {
+    const { ctx, control, agent } = await harness()
+    ctx.sessionProjections.register({
+      key: 'test/control-projection',
+      stateSchema: z.number(),
+      init: () => 0,
+      apply: (state: number) => state + 1,
+      wire: { viewSchema: z.number(), view: (state: number) => state },
+      stateVersion: 1,
+    } as never)
+    const abort = new AbortController()
+    const iterator = control.control(abort.signal)[Symbol.asyncIterator]()
+    await iterator.next()
+
+    agent.session.append('turn/start', { turn: 1 })
+    await expect(iterator.next()).resolves.toMatchObject({
+      value: { type: 'projection', sessionId: agent.id, key: 'test/control-projection', value: 1, seq: 0 },
+    })
+
+    abort.abort()
+    await iterator.next()
+  })
+
   it('projects both pending lists in baselines and live replacement frames', async () => {
     const { control, inbox } = await harness()
     const queued = message('queued')

@@ -1,10 +1,10 @@
 import { Context } from '@deepseek-ai/cordis'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { describe, expect, it, vi } from 'vitest'
-import { remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
+import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import { TerminalControlController } from '../src/terminal-control.ts'
 
-function testContext(terminals: object, owner: object | undefined = { id: SessionId('owner') }): Context {
+function testContext(terminals?: object, owner: object | undefined = { id: SessionId('owner') }, hasOwner = true): Context {
   const ctx = new Context()
   const dispose = (): void => {}
   ctx.provide('typert', {
@@ -12,9 +12,9 @@ function testContext(terminals: object, owner: object | undefined = { id: Sessio
     contexts: { configureHost: () => dispose },
   } as never)
   ctx.provide('agents', {
-    get: (id: string) => id === 'owner' ? owner : undefined,
+    get: (id: string) => id === 'owner' && hasOwner ? owner : undefined,
   } as never)
-  ctx.provide('terminals' as never, terminals as never)
+  if (terminals !== undefined) ctx.provide('terminals' as never, terminals as never)
   return ctx
 }
 
@@ -53,7 +53,7 @@ describe('TerminalControlController', () => {
     expect(controller.list({ sessionId: SessionId('owner') })).toEqual({
       items: [{ terminalId: 'pty-1', type: 'shell', pid: 123, status: { kind: 'running' } }],
     })
-    await expect(controller.open({ sessionId: SessionId('owner'), type: 'shell', name: 'claude' }, signal))
+    await expect(controller.open({ sessionId: SessionId('owner'), type: 'shell', name: 'claude', cwd: '/repo' }, signal))
       .resolves.toEqual({ terminalId: 'pty-2', type: 'shell', pid: 456, status: { kind: 'running' }, motd: '$ ' })
     await controller.write({ sessionId: SessionId('owner'), terminalId: 'pty-2', data: 'claude\r' })
     await controller.resize({ sessionId: SessionId('owner'), terminalId: 'pty-2', rows: 40, cols: 120 })
@@ -64,7 +64,7 @@ describe('TerminalControlController', () => {
 
     expect(seen).toEqual([
       ['list', owner],
-      ['spawn', owner, { type: 'shell', name: 'claude' }],
+      ['spawn', owner, { type: 'shell', name: 'claude', cwd: '/repo' }],
       ['write', owner, 'pty-2', 'claude\r'],
       ['resize', owner, 'pty-2', 40, 120],
       ['signal', owner, 'pty-2', 'SIGINT'],
@@ -98,16 +98,154 @@ describe('TerminalControlController', () => {
     await expect(first).resolves.toEqual({ done: false, value: { data: '\u001b[2Jλ\r\n' } })
     abort.abort()
     await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined })
+    listener?.('after-close')
     expect(dispose).toHaveBeenCalledOnce()
   })
 
   it('rejects terminal access when the Session has no live Agent instead of guessing ownership', () => {
-    const controller = new TerminalControlController(testContext({ listBackends: () => [], list: () => [] }, undefined))
+    const controller = new TerminalControlController(testContext({ listBackends: () => [], list: () => [] }, undefined, false))
     try {
       controller.list({ sessionId: SessionId('owner') })
       expect.fail('expected owner resolution to fail')
     } catch (error: unknown) {
       expect(remoteErrorOf(error)?.code).toBe('terminal/owner-unavailable')
     }
+  })
+
+  it('projects optional terminal fields and exited status without inventing values', () => {
+    const controller = new TerminalControlController(testContext({
+      listBackends: () => ['shell', 'pwsh'],
+      list: () => [
+        {
+          sessionId: 'pty-exited',
+          name: 'finished',
+          type: 'shell',
+          status: { kind: 'exited', exitCode: 1, signal: null },
+        },
+        { sessionId: 'pty-running', type: 'pwsh', status: { kind: 'running' } },
+      ],
+    }))
+
+    expect(controller.backends()).toEqual({ items: ['shell', 'pwsh'] })
+    expect(controller.list({ sessionId: SessionId('owner') })).toEqual({
+      items: [
+        {
+          terminalId: 'pty-exited', name: 'finished', type: 'shell',
+          status: { kind: 'exited', exitCode: 1, signal: null },
+        },
+        { terminalId: 'pty-running', type: 'pwsh', status: { kind: 'running' } },
+      ],
+    })
+  })
+
+  it('rejects malformed, cancelled, and unsupported terminal requests', async () => {
+    const controller = new TerminalControlController(testContext({
+      listBackends: () => [],
+      list: () => [],
+      spawn: async () => ({ sessionId: 'unused', type: 'shell', status: { kind: 'running' }, motd: '' }),
+      write: async () => {},
+      resize: async () => {},
+      signal: async () => ({ delivered: true, targetPgid: 1 }),
+      kill: async () => true,
+      subscribeOutput: () => () => {},
+    }))
+    const live = new AbortController().signal
+
+    await expect(controller.open({ sessionId: SessionId('owner'), type: '' }, live)).rejects.toMatchObject({ code: 'gateway/bad-request' })
+    await expect(controller.open({ sessionId: SessionId('owner'), type: 'shell', name: '' }, live)).rejects.toMatchObject({ code: 'gateway/bad-request' })
+    const aborted = new AbortController()
+    aborted.abort()
+    await expect(controller.open({ sessionId: SessionId('owner'), type: 'shell' }, aborted.signal)).rejects.toThrow()
+
+    await expect(controller.write({ sessionId: SessionId('owner'), terminalId: '', data: 'x' })).rejects.toMatchObject({ code: 'gateway/bad-request' })
+    await expect(controller.resize({ sessionId: SessionId('owner'), terminalId: '', rows: 1, cols: 1 })).rejects.toMatchObject({ code: 'gateway/bad-request' })
+    await expect(controller.resize({ sessionId: SessionId('owner'), terminalId: 'pty', rows: 0, cols: 1 })).rejects.toMatchObject({ code: 'gateway/bad-request' })
+    await expect(controller.resize({ sessionId: SessionId('owner'), terminalId: 'pty', rows: 1, cols: Number.POSITIVE_INFINITY })).rejects.toMatchObject({ code: 'gateway/bad-request' })
+    expect(() => controller.signal({ sessionId: SessionId('owner'), terminalId: '', signal: 'SIGINT' })).toThrowError(/terminal id must be non-empty/)
+    expect(() => controller.signal({ sessionId: SessionId('owner'), terminalId: 'pty', signal: 'SIGSTOP' as never })).toThrowError(/unsupported signal/)
+    await expect(controller.close({ sessionId: SessionId('owner'), terminalId: '' })).rejects.toMatchObject({ code: 'gateway/bad-request' })
+  })
+
+  it('normalizes registry failures while preserving RemoteError identity and codes', async () => {
+    const owner = { id: SessionId('owner') }
+    const rejected = new Error('busy')
+    Object.assign(rejected, { code: 'PTY_BUSY' })
+    const controller = new TerminalControlController(testContext({
+      listBackends: () => [],
+      list: () => { throw rejected },
+      spawn: async () => { throw new Error('spawn failed') },
+      write: async () => { throw new RemoteError('terminal/rejected', 'already rejected', { code: 'EXISTING' }) },
+      resize: async () => {},
+      signal: async () => ({ delivered: true, targetPgid: 1 }),
+      kill: async () => true,
+      subscribeOutput: () => () => {},
+    }, owner))
+
+    expect(() => controller.list({ sessionId: SessionId('owner') })).toThrowError(/rejected by the owner-scoped PTY registry/)
+    await expect(controller.open({ sessionId: SessionId('owner'), type: 'shell' }, new AbortController().signal)).rejects.toThrow('terminal operation failed')
+    await expect(controller.write({ sessionId: SessionId('owner'), terminalId: 'pty', data: 'x' })).rejects.toMatchObject({ code: 'terminal/rejected' })
+
+    const primitiveFailure = new TerminalControlController(testContext({
+      listBackends: () => [],
+      list: () => { throw 'primitive failure' },
+    }, owner))
+    expect(() => primitiveFailure.list({ sessionId: SessionId('owner') })).toThrowError(/terminal operation failed/)
+  })
+
+  it('reports missing registry and output subscription failures through stable errors', async () => {
+    const missing = new TerminalControlController(testContext())
+    expect(() => missing.backends()).toThrowError(/terminal service is unavailable/)
+
+    const controller = new TerminalControlController(testContext({
+      listBackends: () => [],
+      list: () => [],
+      subscribeOutput: () => { throw { code: 'OUTPUT_BUSY' } },
+    }))
+    const output = controller.output(
+      { sessionId: SessionId('owner'), terminalId: 'pty' },
+      new AbortController().signal,
+    )
+    await expect(output[Symbol.asyncIterator]().next()).rejects.toMatchObject({ code: 'terminal/rejected' })
+
+    const aborted = new AbortController()
+    aborted.abort()
+    const cancelled = controller.output(
+      { sessionId: SessionId('owner'), terminalId: 'pty' },
+      aborted.signal,
+    )
+    await expect(cancelled[Symbol.asyncIterator]().next()).rejects.toThrow()
+  })
+
+  it('handles an abort that races output queue waiter installation', async () => {
+    let listener: ((data: string) => void) | undefined
+    let addCount = 0
+    let carrierAborted = false
+    const carrier = {
+      get aborted() { return carrierAborted },
+      addEventListener: (_type: string, callback: EventListenerOrEventListenerObject) => {
+        addCount += 1
+        if (addCount === 2) {
+          carrierAborted = true
+          if (typeof callback === 'function') callback(new Event('abort'))
+        }
+      },
+      removeEventListener: () => {},
+      throwIfAborted: () => {},
+    } as unknown as AbortSignal
+    const controller = new TerminalControlController(testContext({
+      listBackends: () => [],
+      list: () => [],
+      subscribeOutput: (_owner: object, _id: string, next: (data: string) => void) => {
+        listener = next
+        return () => {}
+      },
+    }))
+
+    const iterator = controller.output(
+      { sessionId: SessionId('owner'), terminalId: 'pty' },
+      carrier,
+    )[Symbol.asyncIterator]()
+    await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined })
+    listener?.('ignored')
   })
 })

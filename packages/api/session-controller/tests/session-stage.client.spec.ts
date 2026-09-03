@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import { ClientSessions } from '../src/client/sessions/service.ts'
 import { FakeApiClient, fakeRemote, ok } from './fake-api.client.ts'
+import { TestSessions } from '../../../test-support/client-runtime/src/sessions.ts'
 
 const sid = (value: string): SessionId => value as SessionId
 
@@ -24,6 +25,20 @@ async function feedList(
 }
 
 describe('session staging', () => {
+  it('records resident staging and ignores stale fixture ids', async () => {
+    const ctx = new Context()
+    const sessions = new TestSessions(async (fn) => { await fn() }, ctx)
+    const id = await sessions.add({ id: 'fixture-stage' })
+
+    sessions.stage(id)
+    sessions.stage(sid('missing'))
+
+    expect(sessions.calls.slice(-2)).toEqual([
+      { method: 'stage', args: [id] },
+      { method: 'stage', args: [sid('missing')] },
+    ])
+  })
+
   it('opens a second resident Session without changing the current selection', async () => {
     const ctx = new Context()
     const api = new FakeApiClient()
