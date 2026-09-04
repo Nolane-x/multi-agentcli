@@ -68,7 +68,7 @@
       "icon": "assets/icon.ico"
     },
     "linux": {
-      "target": ["AppImage", "rpm"],
+      "target": ["AppImage"],
       "icon": "assets/icon.png",
       "category": "Development",
       "maintainer": "DeepSeek AI <support@deepseek.ai>"
