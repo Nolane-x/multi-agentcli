@@ -50,5 +50,9 @@ describe('SessionController.stopJob', () => {
 
     expect(controller.stopJob({ sessionId: session.id, jobId })).toEqual({ result: 'requested' })
     expect(cancel).toHaveBeenCalledWith('human requested stop')
+    expect(() => controller.stopJob({
+      sessionId: 'missing' as typeof session.id,
+      jobId,
+    })).toThrow('background job is unavailable')
   })
 })

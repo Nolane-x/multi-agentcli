@@ -135,7 +135,7 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-models-add'))
     const dialog = page.getByRole('dialog', { name: '设置' })
     await dialog.getByRole('button', { name: '编辑 minimax-cn' }).click()
-    await dialog.getByRole('textbox', { name: 'API 密钥', exact: true }).fill('sk-e2e-minimax')
+    await dialog.getByPlaceholder('输入 API 密钥，或留空使用环境认证').fill('sk-e2e-minimax')
     await dialog.getByRole('button', { name: '保存', exact: true }).click()
     // The profile lands in settings.yaml with only the derived reference, the
     // key value lands in the harness home's .credentials.yaml, the dormant route
@@ -221,6 +221,7 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
       Array.from({ length: count }, () => true),
     )
     await picker.getByRole('button', { name: '取消', exact: true }).click()
+    await picker.waitFor({ state: 'detached', timeout: 10_000 })
     await settingsDialog.getByRole('button', { name: '取消', exact: true }).click()
   }, 60_000)
 

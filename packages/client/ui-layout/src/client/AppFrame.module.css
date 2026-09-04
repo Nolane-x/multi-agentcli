@@ -117,7 +117,9 @@
   box-sizing: border-box;
   padding: 18px;
   padding-left: 86px;
-  transition: padding-right var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+  transition:
+    padding-left var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+    padding-right var(--ds-transition-duration-slow) var(--ds-ease-in-out);
 }
 
 .mosaic {
@@ -172,11 +174,27 @@
 }
 
 .agentTileCurrent {
+  /* The live Harness surface can portal fixed-position dialogs (settings,
+     confirmations, pickers). A transform here would make this mosaic tile
+     their containing block, clipping an otherwise viewport-sized modal to
+     one agent cell and letting the rail intercept its controls. */
+  transform: none;
   border-color: color-mix(in srgb, var(--dsw-alias-label-primary) 22%, var(--dsw-alias-border-l2));
   box-shadow:
     0 20px 54px color-mix(in srgb, black 13%, transparent),
     0 0 0 1px color-mix(in srgb, var(--dsw-alias-label-primary) 4%, transparent),
-    inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
+  inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
+}
+
+.agentTileTerminal {
+  background: #101312;
+  border-color: color-mix(in srgb, #68d6a7 22%, var(--dsw-alias-border-l2));
+}
+
+.agentTileTerminal > * {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
 }
 
 .agentTilePreview {
@@ -388,37 +406,6 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
-}
-
-.surfaceTabs {
-  flex: none !important;
-  display: flex;
-  gap: 4px;
-  padding: 7px 10px 0;
-  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 18%, transparent);
-}
-
-.surfaceTab {
-  padding: 4px 7px;
-  border: 1px solid transparent;
-  border-radius: 6px 6px 0 0;
-  background: transparent;
-  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
-  font: 600 9px/1.2 var(--ds-font-family-code);
-  cursor: pointer;
-}
-
-.surfaceTab[aria-selected='true'] {
-  border-color: color-mix(in srgb, var(--dsw-alias-border-l2) 78%, transparent);
-  border-bottom-color: transparent;
-  background: var(--dsw-alias-bg-base);
-  color: var(--dsw-alias-label-primary);
-}
-
-.surfaceTab:hover,
-.surfaceTab:focus-visible {
-  color: var(--dsw-alias-label-primary);
-  outline: none;
 }
 
 .agentPreviewBody {

@@ -53,7 +53,8 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     scaffold = await launchWebScaffold({
       replayFixture: PARENT_FIXTURE,
       replayChildFixtures: [CHILD_FIXTURE],
-      paceMs: 50,
+      // Keep the live member interactive while retaining a bounded replay.
+      paceMs: 100,
       compareReplaySession: false,
     })
     browser = await chromium.launch()
@@ -88,7 +89,7 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     expect(await phaseDisclosure.getAttribute('aria-expanded')).toBe('true')
     expect(await runDisclosure.evaluate(element => getComputedStyle(element).cursor)).toBe('pointer')
     expect(await phaseDisclosure.evaluate(element => getComputedStyle(element).cursor)).toBe('pointer')
-    const member = page.getByRole('button', { name: /^Open Reply with exactly the word/ })
+    const member = page.locator('[data-workflow-run]').getByRole('button', { name: /^Open Reply with exactly the word/ })
     await member.waitFor({ timeout: 15_000 })
 
     await phaseDisclosure.click()
@@ -98,6 +99,8 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     await compareOrRefreshGolden(UI_LIVE_EXPECTED, liveSnapshot, MODE)
     await phaseDisclosure.press('Enter')
     await member.waitFor()
+    await member.click()
+    await page.getByText(CHILD_PROMPT, { exact: true }).waitFor({ timeout: 15_000 })
     await runDisclosure.click()
     expect(await runDisclosure.getAttribute('aria-expanded')).toBe('false')
     expect(await disclosures.count()).toBe(1)
@@ -155,9 +158,6 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     })
     await page.setViewportSize({ width: 1280, height: 800 })
 
-    await member.click()
-    await page.getByText(CHILD_PROMPT, { exact: true }).waitFor({ timeout: 15_000 })
-
     const sessions = page.getByRole('tree', { name: 'Sessions' })
     await sessions.getByRole('treeitem', { name: /Use the workflow tool exactly/ }).click()
     await settled
@@ -176,9 +176,9 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     expect(await terminalPhase.getAttribute('aria-expanded')).toBe('false')
     expect(await terminalPhase.evaluate(element => getComputedStyle(element).cursor)).toBe('pointer')
     await terminalPhase.click()
-    await page.getByText(CHILD_PROMPT, { exact: false }).waitFor()
+    await page.getByText(CHILD_PROMPT, { exact: true }).waitFor()
     await expect.poll(
-      () => page.getByRole('button', { name: /^Open Reply with exactly the word/ }).count(),
+      () => page.locator('[data-workflow-run]').getByRole('button', { name: /^Open Reply with exactly the word/ }).count(),
       { timeout: 10_000 },
     ).toBe(0)
   }, 90_000)
@@ -199,7 +199,7 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     expect(await phase.getAttribute('aria-expanded')).toBe('false')
     await phase.click()
     await page.getByText(CHILD_PROMPT, { exact: false }).waitFor()
-    expect(await page.getByRole('button', { name: /^Open Reply with exactly the word/ }).count()).toBe(0)
+    expect(await page.locator('[data-workflow-run]').getByRole('button', { name: /^Open Reply with exactly the word/ }).count()).toBe(0)
 
   }, 60_000)
 

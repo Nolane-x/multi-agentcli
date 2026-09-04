@@ -7,6 +7,12 @@ import { TestSessions } from '../../../test-support/client-runtime/src/sessions.
 
 const sid = (value: string): SessionId => value as SessionId
 
+async function readyContext(): Promise<Context> {
+  const ctx = new Context()
+  await ctx.plugin(() => undefined)
+  return ctx
+}
+
 async function feedList(
   svc: ClientSessions,
   api: FakeApiClient,
@@ -40,7 +46,7 @@ describe('session staging', () => {
   })
 
   it('opens a second resident Session without changing the current selection', async () => {
-    const ctx = new Context()
+    const ctx = await readyContext()
     const api = new FakeApiClient()
     const svc = new ClientSessions(ctx, fakeRemote(api))
 
@@ -62,7 +68,7 @@ describe('session staging', () => {
   })
 
   it('keeps repeated staging idempotent and preserves global selection', async () => {
-    const ctx = new Context()
+    const ctx = await readyContext()
     const api = new FakeApiClient()
     const svc = new ClientSessions(ctx, fakeRemote(api))
 
@@ -81,7 +87,7 @@ describe('session staging', () => {
   })
 
   it('tears down an explicitly staged pane after its Session leaves the eligible list', async () => {
-    const ctx = new Context()
+    const ctx = await readyContext()
     const api = new FakeApiClient()
     const svc = new ClientSessions(ctx, fakeRemote(api))
 
@@ -104,7 +110,7 @@ describe('session staging', () => {
   })
 
   it('ignores an id that is no longer addressable instead of mutating selection', async () => {
-    const ctx = new Context()
+    const ctx = await readyContext()
     const api = new FakeApiClient()
     const svc = new ClientSessions(ctx, fakeRemote(api))
 

@@ -80,4 +80,16 @@ describe('TerminalPane', () => {
     expect(onClosed).toHaveBeenCalledTimes(1)
     expect(queryByRole('button', { name: 'Close terminal' })).toBeNull()
   })
+
+  it('closes the PTY when its spatial tile is removed', async () => {
+    const terminal = fakeTerminal()
+    const { getByRole, unmount } = render(
+      <TerminalPane sessionId={'s-terminal' as never} terminal={terminal} t={t} />,
+    )
+
+    await waitFor(() => { expect(getByRole('button', { name: 'Close terminal' })).toBeTruthy() })
+    unmount()
+
+    await waitFor(() => { expect(terminal.close).toHaveBeenCalledWith('s-terminal', 'pty-test') })
+  })
 })

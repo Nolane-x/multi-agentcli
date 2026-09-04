@@ -63,6 +63,8 @@ function isLifecycleActive(value: { readonly active: boolean }): boolean {
 export function TerminalPane(props: TerminalPaneProps) {
   const screenRef = useRef<TerminalScreen>(createTerminalScreen(DEFAULT_ROWS, DEFAULT_COLS))
   const viewportRef = useRef<HTMLDivElement | null>(null)
+  const terminalIdRef = useRef<string>()
+  const closeSentRef = useRef(false)
   const [snapshot, setSnapshot] = useState<TerminalScreenSnapshot>(() => screenRef.current.snapshot())
   const [terminalId, setTerminalId] = useState<string>()
   const [phase, setPhase] = useState<TerminalPhase>('opening')
@@ -71,6 +73,11 @@ export function TerminalPane(props: TerminalPaneProps) {
   useEffect(() => {
     const controller = new AbortController()
     const lifecycle: { active: boolean } = { active: true }
+    terminalIdRef.current = undefined
+    closeSentRef.current = false
+    setTerminalId(undefined)
+    setError(undefined)
+    setPhase('opening')
     void (async () => {
       const backends = await props.terminal.backends()
       if (isRemoteFailure(backends)) throw new Error(errorMessage(backends.error))
@@ -82,8 +89,12 @@ export function TerminalPane(props: TerminalPaneProps) {
         ...(props.cwd === undefined ? {} : { cwd: props.cwd }),
       }, controller.signal)
       if (isRemoteFailure(opened)) throw new Error(errorMessage(opened.error))
-      if (!isLifecycleActive(lifecycle)) return
+      if (!isLifecycleActive(lifecycle)) {
+        await props.terminal.close(props.sessionId, opened.value.terminalId).catch(() => undefined)
+        return
+      }
 
+      terminalIdRef.current = opened.value.terminalId
       setTerminalId(opened.value.terminalId)
       screenRef.current.write(opened.value.motd)
       setSnapshot(screenRef.current.snapshot())
@@ -103,6 +114,13 @@ export function TerminalPane(props: TerminalPaneProps) {
     return () => {
       lifecycle.active = false
       controller.abort()
+      const id = terminalIdRef.current
+      if (id !== undefined && !closeSentRef.current) {
+        closeSentRef.current = true
+        void props.terminal.close(props.sessionId, id).catch(() => {
+          closeSentRef.current = false
+        })
+      }
     }
   }, [props.backend, props.cwd, props.sessionId, props.terminal])
 
@@ -128,21 +146,26 @@ export function TerminalPane(props: TerminalPaneProps) {
   }, [write])
 
   const close = useCallback(() => {
-    if (terminalId === undefined) return
+    const id = terminalIdRef.current
+    if (id === undefined || closeSentRef.current) return
     setPhase('stopping')
-    void props.terminal.close(props.sessionId, terminalId).then((result) => {
+    closeSentRef.current = true
+    void props.terminal.close(props.sessionId, id).then((result) => {
       if (isRemoteFailure(result)) {
+        closeSentRef.current = false
         setError(errorMessage(result.error))
         setPhase('error')
         return
       }
+      terminalIdRef.current = undefined
       setPhase('closed')
       props.onClosed?.()
     }).catch((cause: unknown) => {
+      closeSentRef.current = false
       setError(errorMessage(cause))
       setPhase('error')
     })
-  }, [props.onClosed, props.sessionId, props.terminal, terminalId])
+  }, [props.onClosed, props.sessionId, props.terminal])
 
   const stop = useCallback(() => {
     if (terminalId === undefined || phase !== 'running') return

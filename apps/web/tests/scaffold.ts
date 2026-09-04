@@ -827,7 +827,11 @@ function normalizeWebSessionVolatiles(log: string): string {
     }
     if (Array.isArray(value)) return value.map(normalizeValue)
     if (value !== null && typeof value === 'object') {
-      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalizeValue(item)]))
+      // Browser replay goldens must remain platform-neutral.
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+        key,
+        key === 'clientTimeZone' && typeof item === 'string' ? 'UTC' : normalizeValue(item),
+      ]))
     }
     return value
   }
@@ -978,13 +982,17 @@ export function fixtureIdentity(
  * @returns the realized fixture text.
  */
 export function realizeSeedFixture(scaffold: WebScaffold, fixtureText: string, id: string): string {
+  // `fixtureText` is JSONL. A Windows cwd must be inserted as a JSON-escaped
+  // string fragment; inserting the native path literally turns `\U`/`\t`
+  // sequences into invalid JSON before the seed can be parsed.
+  const escapedCwd = JSON.stringify(scaffold.workspaceCwd).slice(1, -1)
   const realized = fixtureText
     .split('{{sessionId}}').join(id)
     .split('{{session:1}}').join(id)
     .replace(/\{\{session:([2-9]\d*)\}\}/g, (_token, ordinal: string) => `${id}-child-${ordinal}`)
     .replace(/\{\{(message|approval|workflow|command|rpc|retry|id):([1-9]\d*)\}\}/g, (_token, kind: string, ordinal: string) =>
       fixtureIdentity(kind as 'message' | 'approval' | 'workflow' | 'command' | 'rpc' | 'retry' | 'id', Number(ordinal)))
-    .split('{{cwd}}').join(scaffold.workspaceCwd)
+    .split('{{cwd}}').join(escapedCwd)
   const fixtureCwd = (JSON.parse(realized.split('\n', 1)[0]!) as { cwd?: string }).cwd
   return fixtureCwd === undefined
     ? realized
@@ -1166,7 +1174,9 @@ export async function captureStableAria(
   workspaceCwd: string,
   options: { normalizeAge?: boolean } = {},
 ): Promise<string> {
-  const region = page.locator(selector).first()
+  const region = selector.includes('centerCol')
+    ? page.locator('[data-agent-current] [class*="agentBody"]').first()
+    : page.locator(selector).first()
   const age = options.normalizeAge === true
   let previous = normalizeAria(await region.ariaSnapshot(), workspaceCwd, age)
   await expect.poll(async () => {
@@ -1193,7 +1203,10 @@ export async function captureExpandedTurnProcessAria(
   workspaceCwd: string,
   options: { scrollToBottom?: boolean } = {},
 ): Promise<string> {
-  const controls = page.locator('[data-turn-process]')
+  const region = selector.includes('centerCol')
+    ? page.locator('[data-agent-current] [class*="agentBody"]').first()
+    : page.locator(selector).first()
+  const controls = region.locator('[data-turn-process]')
   const count = await controls.count()
   expect(count).toBeGreaterThan(0)
   const opened: number[] = []
@@ -1205,8 +1218,8 @@ export async function captureExpandedTurnProcessAria(
   }
   try {
     if (options.scrollToBottom === true) {
-      const backToBottom = page.getByRole('button', { name: 'Back to bottom', exact: true })
-      const scroll = page.locator('[data-conversation-scroll]')
+      const backToBottom = region.getByRole('button', { name: 'Back to bottom', exact: true })
+      const scroll = region.locator('[data-conversation-scroll]')
       await expect.poll(async () => {
         const distanceFromBottom = await scroll.evaluate((host) => {
           host.scrollTop = host.scrollHeight

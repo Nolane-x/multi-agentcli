@@ -180,6 +180,11 @@ describe('AppFrame', () => {
     await act(async () => { await vi.runAllTimersAsync() })
     expect(container.querySelector('[data-terminal-id="pty-integration"]')).toBeTruthy()
     expect(terminal.open).toHaveBeenCalledWith('s-test', { type: 'shell' }, expect.any(AbortSignal))
+
+    fireEvent.click(getByRole('button', { name: 'Create terminal' }))
+    await act(async () => { await vi.runAllTimersAsync() })
+    expect(container.querySelectorAll('[data-terminal-card-id]')).toHaveLength(2)
+    expect(terminal.open).toHaveBeenCalledTimes(2)
   })
 
   it('localizes the product title when the build does not supply one', () => {
