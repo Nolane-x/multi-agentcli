@@ -1,16 +1,14 @@
-- strong: Use only Cordis tools. First
-- text: LEAD LIVE {{cwd}}/workspace ready
-- button "Focus this agent"
-- navigation "Session hierarchy":
-  - button "Use only Cordis tools. First" [disabled]
-- img
-- text: Standard mode
-- button "Session log":
-  - text: Session log
+- banner:
+  - navigation "Session hierarchy":
+    - button "Use only Cordis tools. First" [disabled]
   - img
-- tablist:
-  - tab "Chat" [selected]
-  - tab "Trajectory"
+  - text: Standard mode
+  - button "Session log":
+    - text: Session log
+    - img
+  - tablist:
+    - tab "Chat" [selected]
+    - tab "Trajectory"
 - button "System prompt":
   - img
   - img
