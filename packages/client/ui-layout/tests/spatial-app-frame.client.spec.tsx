@@ -137,16 +137,16 @@ afterEach(() => {
 })
 
 describe('AppFrame spatial agent canvas', () => {
-  it('renders a five-agent family as a centered 3x3-sized mosaic with five real scoped conversation occurrences', () => {
+  it('renders a five-agent family as a centered 3x3-sized mosaic with one interactive scoped conversation', () => {
     const { container, stageAgent } = mountSpatialFrame(5)
     const tiles = container.querySelectorAll('[data-agent-id]')
     expect(tiles).toHaveLength(5)
     expect((tiles[0] as HTMLElement).style.flexBasis).toContain('33.333')
     expect((tiles[0] as HTMLElement).style.height).toContain('33.333')
-    expect(container.querySelectorAll('[data-testid="conversation"]')).toHaveLength(5)
-    expect(container.querySelectorAll('[data-session-scope]')).toHaveLength(5)
+    expect(container.querySelectorAll('[data-testid="conversation"]')).toHaveLength(1)
+    expect(container.querySelectorAll('[data-session-scope]')).toHaveLength(1)
     expect([...container.querySelectorAll('[data-session-scope]')].map(node => node.getAttribute('data-session-scope')))
-      .toEqual(['agent-1', 'agent-2', 'agent-3', 'agent-4', 'agent-5'])
+      .toEqual(['agent-1'])
     expect(stageAgent).toHaveBeenCalledTimes(5)
     expect(stageAgent.mock.calls.map(call => call[0])).toEqual([
       'agent-1', 'agent-2', 'agent-3', 'agent-4', 'agent-5',
@@ -236,8 +236,8 @@ describe('AppFrame spatial agent canvas', () => {
     expect(jobTiles[0]?.textContent).toContain('running')
     expect(container.textContent).not.toContain('Old review')
     expect(container.textContent).not.toContain('npm test')
-    expect(container.querySelectorAll('[data-testid="conversation"]')).toHaveLength(4)
-    expect(container.querySelectorAll('[data-session-scope]')).toHaveLength(4)
+    expect(container.querySelectorAll('[data-testid="conversation"]')).toHaveLength(1)
+    expect(container.querySelectorAll('[data-session-scope]')).toHaveLength(1)
     expect(stageAgent).toHaveBeenCalledTimes(4)
   })
 

@@ -768,6 +768,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
             options.replayFixture,
             mode,
             `http://${browserHost}:${port}`,
+            workspaceCwd,
           )
         } catch (error) {
           failures.push(error)
@@ -820,10 +821,18 @@ function rawSessionLog(session: Session): string {
   ].join('\n')
 }
 
-function normalizeWebSessionVolatiles(log: string): string {
+function normalizeWebSessionVolatiles(log: string, workspaceCwds: readonly string[] = []): string {
   const normalizeValue = (value: unknown): unknown => {
     if (typeof value === 'string') {
-      return value.replace(/Anonymous user: [^.]+(?=\. Session sharing)/g, 'Anonymous user: {{anonymousUserId}}')
+      let normalized = value.replace(/Anonymous user: [^.]+(?=\. Session sharing)/g, 'Anonymous user: {{anonymousUserId}}')
+      for (const cwd of workspaceCwds) normalized = normalized.split(cwd).join('{{cwd}}')
+      // The runtime-context message is authored before the workspace session
+      // header is persisted, so cover the scaffold's generated child path even
+      // when that message used a different path spelling.
+      return normalized.replace(
+        /(?:[A-Za-z]:)?[\\/]+(?:[^\\/"\r\n]+[\\/]+)*dsh-web-e2e-ws-[^\\/"\r\n]+[\\/]+workspace/g,
+        '{{cwd}}',
+      )
     }
     if (Array.isArray(value)) return value.map(normalizeValue)
     if (value !== null && typeof value === 'object') {
@@ -846,7 +855,7 @@ function normalizeWebSessionVolatiles(log: string): string {
 }
 
 function stableSessionFixture(session: Session, existing: string, workspaceCwd: string): string {
-  const fresh = scrubSessionSnapshot(normalizeWebSessionVolatiles(rawSessionLog(session)))
+  const fresh = scrubSessionSnapshot(normalizeWebSessionVolatiles(rawSessionLog(session), [workspaceCwd]))
     .split(session.id).join('{{sessionId}}')
     .split(workspaceCwd).join('{{cwd}}')
   const stable = redactSessionSnapshotIds(stabilizeFixtureMessageIds([fresh], [existing]))[0]
@@ -859,6 +868,7 @@ async function assertReplaySession(
   fixturePath: string,
   mode: WebSnapshotMode,
   webUrl: string,
+  workspaceCwd: string,
 ): Promise<void> {
   let expected = await readFile(fixturePath, 'utf8')
   const userPrompts = fixtureUserPrompts(expected)
@@ -884,12 +894,16 @@ async function assertReplaySession(
     id?: unknown
     cwd?: unknown
   }
-  const actualContext: NormalizeContext = { sessionIds: [String(session.id)], cwd: sessionCwd }
+  const actualContext: NormalizeContext = {
+    sessionIds: [String(session.id)],
+    cwd: sessionCwd,
+    cwdAliases: [workspaceCwd],
+  }
   const expectedContext: NormalizeContext = {
     sessionIds: typeof expectedHeader.id === 'string' ? [expectedHeader.id] : [],
     cwd: typeof expectedHeader.cwd === 'string' ? expectedHeader.cwd : '\0no-cwd\0',
   }
-  expect(normalizeSessionSnapshots([normalizeWebSessionVolatiles(actual)], actualContext)[0], `${fixturePath}: persisted replay`)
+  expect(normalizeSessionSnapshots([normalizeWebSessionVolatiles(actual, [sessionCwd, workspaceCwd])], actualContext)[0], `${fixturePath}: persisted replay`)
     .toBe(normalizeSessionSnapshots([normalizeWebSessionVolatiles(expected)], expectedContext)[0])
 
   const fixtureDir = dirname(fixturePath)
@@ -1174,9 +1188,11 @@ export async function captureStableAria(
   workspaceCwd: string,
   options: { normalizeAge?: boolean } = {},
 ): Promise<string> {
-  const region = selector.includes('centerCol')
-    ? page.locator('[data-agent-current] [class*="agentBody"]').first()
-    : page.locator(selector).first()
+  let region = page.locator(selector).first()
+  if (selector.includes('centerCol')) {
+    const currentBody = page.locator('[data-agent-current] [class*="agentBody"]').first()
+    if (await currentBody.count() > 0) region = currentBody
+  }
   const age = options.normalizeAge === true
   let previous = normalizeAria(await region.ariaSnapshot(), workspaceCwd, age)
   await expect.poll(async () => {
@@ -1203,9 +1219,11 @@ export async function captureExpandedTurnProcessAria(
   workspaceCwd: string,
   options: { scrollToBottom?: boolean } = {},
 ): Promise<string> {
-  const region = selector.includes('centerCol')
-    ? page.locator('[data-agent-current] [class*="agentBody"]').first()
-    : page.locator(selector).first()
+  let region = page.locator(selector).first()
+  if (selector.includes('centerCol')) {
+    const currentBody = page.locator('[data-agent-current] [class*="agentBody"]').first()
+    if (await currentBody.count() > 0) region = currentBody
+  }
   const controls = region.locator('[data-turn-process]')
   const count = await controls.count()
   expect(count).toBeGreaterThan(0)

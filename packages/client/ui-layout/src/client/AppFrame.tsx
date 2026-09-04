@@ -522,6 +522,18 @@ export function AppFrame({
   const cellPercent = focusedVisible ? 100 : mosaicCellPercent(visibleTileCount)
   const gap = focusedVisible ? 0 : 12
   const gapShare = gap * (dimension - 1) / dimension
+  // Preserve the single-agent Harness surface until there is another visible
+  // tile. The spatial shell becomes a mosaic as soon as a second agent, job,
+  // or terminal is present; the first agent keeps the existing full-page
+  // interaction geometry and accessibility tree.
+  const mosaicVisible = focusedVisible || visibleTileCount > 1
+  const currentConversation = currentSession === undefined || SessionScope === undefined
+    ? renderSlot('conversation', {})
+    : (
+      <SessionScope scope="session-maybe" scopeKey={String(currentSession)}>
+        {renderSlot('conversation', {})}
+      </SessionScope>
+    )
   const tileStyle: CSSProperties = {
     flexBasis: `calc(${cellPercent}% - ${gapShare}px)`,
     height: `calc(${cellPercent}% - ${gapShare}px)`,
@@ -573,9 +585,9 @@ export function AppFrame({
         leftInset={narrow ? 74 : sidebarCollapsed ? 86 : cols.sidebar + 18}
         rightInset={rightInset}
       >
-        {activeAgentIds.length === 0 ? (
+        {!mosaicVisible ? (
           <div className={css.emptyStage}>
-            {renderSlot('conversation', {})}
+            {currentConversation}
           </div>
         ) : (
           <div className={css.mosaic} data-focused={focusedVisible || undefined}>
@@ -587,13 +599,12 @@ export function AppFrame({
               const parentTitle = lineage.parentId === undefined
                 ? undefined
                 : sessionsById[lineage.parentId]?.displayTitle ?? String(lineage.parentId)
-              const conversation = SessionScope === undefined
-                ? current ? renderSlot('conversation', {}) : undefined
-                : (
-                  <SessionScope scope="session-maybe" scopeKey={String(id)}>
-                    {renderSlot('conversation', {})}
-                  </SessionScope>
-                )
+              // Keep one interactive Harness transcript in the document. The
+              // other family members remain visible as spatial previews and
+              // can be opened/focused through their header controls; mounting
+              // several full composers at once duplicates global UI affordances
+              // (tabs, overlays and keyboard targets) inside one page.
+              const conversation = current ? currentConversation : undefined
               return (
                 <AgentChrome
                   key={id}

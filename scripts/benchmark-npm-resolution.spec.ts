@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   benchmarkNpmResolution,
   buildRegistryIndex,
@@ -13,6 +13,12 @@ import {
 } from './benchmark-npm-resolution.ts'
 
 const roots: string[] = []
+
+// npm's own startup/cache work is much slower when this file runs inside the
+// four-way coverage partition, so the default 5s Vitest timeout is too tight
+// for these integration-shaped tests. The helper still enforces its 10s child
+// deadline; this only prevents Vitest from aborting the test before it does.
+vi.setConfig({ testTimeout: 60_000 })
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
@@ -119,7 +125,7 @@ describe('npm resolution benchmark', () => {
     expect(result.registryRequests).toBeGreaterThan(0)
     expect(result.archiveRequests).toBe(0)
     expect(result.unknownPackages).toEqual([])
-  })
+  }, 15_000)
 
   it('returns npm placement for two aliased package versions without requesting archives', async () => {
     const index: RegistryIndex = new Map([[
