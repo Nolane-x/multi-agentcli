@@ -32,7 +32,7 @@
   min-width: 0;
   overflow: hidden;
   box-sizing: border-box;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 18px;
   background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 92%, transparent);
   box-shadow:
@@ -155,7 +155,7 @@
   flex-direction: column;
   overflow: hidden;
   box-sizing: border-box;
-  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 88%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--dsw-alias-border-l2) 88%, transparent);
   border-radius: 18px;
   background: color-mix(in srgb, var(--dsw-alias-bg-base) 96%, var(--dsw-specific-sidebar-fill));
   box-shadow:
@@ -209,7 +209,7 @@
   gap: 12px;
   padding: 0 10px 0 14px;
   box-sizing: border-box;
-  border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 72%, transparent);
+  border-bottom: 0.5px solid color-mix(in srgb, var(--dsw-alias-border-l2) 72%, transparent);
   background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 45%, transparent);
   user-select: none;
 }
@@ -250,6 +250,7 @@
   width: 7px;
   height: 7px;
   border-radius: 999px;
+  corner-shape: round;
   background: color-mix(in srgb, var(--dsw-alias-label-secondary) 75%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-label-secondary) 8%, transparent);
 }
@@ -476,7 +477,7 @@
   min-width: 0;
   overflow: hidden;
   box-sizing: border-box;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 18px;
   background: color-mix(in srgb, var(--dsw-alias-bg-base) 94%, transparent);
   box-shadow:
@@ -523,6 +524,7 @@
   width: 4px;
   height: 34px;
   border-radius: 999px;
+  corner-shape: round;
   background: color-mix(in srgb, var(--dsw-alias-label-secondary) 24%, transparent);
   opacity: 0;
   transition:

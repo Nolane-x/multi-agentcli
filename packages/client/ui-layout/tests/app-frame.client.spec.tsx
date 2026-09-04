@@ -103,7 +103,11 @@ function mountFrame(terminal?: TerminalSessionClient) {
       useWorkspaces={((sel: (s: WorkspaceSnapshot) => unknown) => sel(workspaceState)) as never}
       SessionProvider={SessionProviderStub}
       {...terminal === undefined ? {} : { terminal }}
-      t={key => key === 'brand.localBuild' ? 'DSH Local Build' : key}
+      t={key => key === 'brand.localBuild'
+        ? 'DSH Local Build'
+        : key === 'spatial.agent.createTerminal'
+          ? 'Create terminal'
+          : key}
     />
   )
   const utils = render(element())

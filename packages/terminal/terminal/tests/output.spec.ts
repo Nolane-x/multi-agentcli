@@ -67,10 +67,16 @@ describe('TerminalSessionService raw output', () => {
     const terminals = ctx.terminals as unknown as RawOutputService
     const received: string[] = []
 
-    const dispose = terminals.subscribeOutput(owner, created.sessionId, data => { received.push(data) })
+    const dispose = terminals.subscribeOutput(owner, created.sessionId, (data) => { received.push(data) })
     for (const listener of listeners) listener('\u001b[2Jλ\r\n')
     expect(received).toEqual(['\u001b[2Jλ\r\n'])
-    expect(() => terminals.subscribeOutput(foreign, created.sessionId, () => {})).toThrowMatchingObject({ code: 'FOREIGN_SESSION' })
+    let foreignError: unknown
+    try {
+      terminals.subscribeOutput(foreign, created.sessionId, () => {})
+    } catch (cause) {
+      foreignError = cause
+    }
+    expect(foreignError).toMatchObject({ code: 'FOREIGN_SESSION' })
 
     dispose()
     dispose()
@@ -94,6 +100,12 @@ describe('TerminalSessionService raw output', () => {
     const created = await ctx.terminals.spawn(owner, { type: 'stub' })
     const terminals = ctx.terminals as unknown as RawOutputService
 
-    expect(() => terminals.subscribeOutput(owner, created.sessionId, () => {})).toThrowMatchingObject({ code: 'OUTPUT_UNSUPPORTED' })
+    let unsupportedError: unknown
+    try {
+      terminals.subscribeOutput(owner, created.sessionId, () => {})
+    } catch (cause) {
+      unsupportedError = cause
+    }
+    expect(unsupportedError).toMatchObject({ code: 'OUTPUT_UNSUPPORTED' })
   })
 })

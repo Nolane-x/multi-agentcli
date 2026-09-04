@@ -1,5 +1,7 @@
-- banner:
-  - navigation "Session hierarchy":
+- strong: Use the bash tool to
+- text: LEAD LIVE {{cwd}} ready
+- button "Focus this agent"
+- navigation "Session hierarchy":
     - button "Use the bash tool to" [disabled]
   - img
   - text: Minimal mode

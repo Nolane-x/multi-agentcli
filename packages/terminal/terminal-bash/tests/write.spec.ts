@@ -10,7 +10,7 @@ class OrderedTerminal implements SubprocessTerminalHandle {
   readonly outcome = Promise.withResolvers<SubprocessOutcome>()
   readonly done = this.outcome.promise
   readonly writes: string[] = []
-  firstWriteGate: PromiseWithResolvers<void> | undefined
+  firstWriteGate: PromiseWithResolvers<undefined> | undefined
 
   async write(data: string): Promise<void> {
     this.writes.push(data)
@@ -37,7 +37,7 @@ function config(): ResolvedConfig {
 describe('LocalPtySession raw input', () => {
   it('serializes rapid keystrokes in exact call order', async () => {
     const terminal = new OrderedTerminal()
-    terminal.firstWriteGate = Promise.withResolvers<void>()
+    terminal.firstWriteGate = Promise.withResolvers<undefined>()
     const session = new LocalPtySession(terminal, config())
 
     const first = session.write('a')
@@ -45,7 +45,7 @@ describe('LocalPtySession raw input', () => {
     await Promise.resolve()
     expect(terminal.writes).toEqual(['a'])
 
-    terminal.firstWriteGate.resolve()
+    terminal.firstWriteGate.resolve(undefined)
     await Promise.all([first, second])
     expect(terminal.writes).toEqual(['a', '\u001b[A'])
     await session.close('test complete')
@@ -53,13 +53,19 @@ describe('LocalPtySession raw input', () => {
 
   it('fences model sends while raw input is still draining', async () => {
     const terminal = new OrderedTerminal()
-    terminal.firstWriteGate = Promise.withResolvers<void>()
+    terminal.firstWriteGate = Promise.withResolvers<undefined>()
     const session = new LocalPtySession(terminal, config())
 
     const pending = session.write('codex\r')
-    expect(() => session.startSend({ text: 'echo should-not-race', submit: true })).toThrowMatchingObject({ code: 'SEND_ACTIVE' })
+    let error: unknown
+    try {
+      session.startSend({ text: 'echo should-not-race', submit: true })
+    } catch (cause) {
+      error = cause
+    }
+    expect(error).toMatchObject({ code: 'SEND_ACTIVE' })
 
-    terminal.firstWriteGate.resolve()
+    terminal.firstWriteGate.resolve(undefined)
     await pending
     await session.close('test complete')
   })

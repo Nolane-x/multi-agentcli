@@ -21,7 +21,7 @@ describe('SessionController terminal composition', () => {
     } as never)
 
     const sessionController = createSessionTestController(ctx, defaults) as SessionController
-    await Promise.resolve()
+    await new Promise<void>(resolve => setImmediate(resolve))
 
     expect(ctx.get('terminalControlController' as never)).toBeDefined()
     expect(Reflect.has(sessionController, 'backends')).toBe(false)

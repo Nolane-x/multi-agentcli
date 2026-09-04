@@ -251,6 +251,16 @@ export class LocalPtySession implements TerminalBackendSession {
     }
   }
 
+  /** Hold readiness probes until a dialect-specific startup sequence emits output. */
+  beginInitialization(): void {
+    this.initializing = true
+  }
+
+  /** Release the startup-only readiness fence after the initial prompt is accepted. */
+  endInitialization(): void {
+    this.initializing = false
+  }
+
   startSend(request: TerminalSendRequest): TerminalSendOperation {
     if (this.closing) throw new Error('PTY session is closing')
     if (this.statusValue.kind === 'exited') throw new Error('PTY session has exited')
