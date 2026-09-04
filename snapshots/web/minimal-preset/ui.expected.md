@@ -2,15 +2,15 @@
 - text: LEAD LIVE {{cwd}} ready
 - button "Focus this agent"
 - navigation "Session hierarchy":
-    - button "Use the bash tool to" [disabled]
+  - button "Use the bash tool to" [disabled]
+- img
+- text: Minimal mode
+- button "Session log":
+  - text: Session log
   - img
-  - text: Minimal mode
-  - button "Session log":
-    - text: Session log
-    - img
-  - tablist:
-    - tab "Chat" [selected]
-    - tab "Trajectory"
+- tablist:
+  - tab "Chat" [selected]
+  - tab "Trajectory"
 - button "System prompt":
   - img
   - img
