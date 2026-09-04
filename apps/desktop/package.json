@@ -50,6 +50,7 @@
   "build": {
     "appId": "ai.deepseek.dsh-desktop",
     "productName": "DeepSeek Harness Desktop",
+    "artifactName": "DeepSeek-Harness-Desktop-${version}.${ext}",
     "directories": {
       "output": "release"
     },
