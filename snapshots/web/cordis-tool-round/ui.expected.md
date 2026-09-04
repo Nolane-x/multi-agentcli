@@ -1,18 +1,16 @@
-- banner:
-  - navigation "Session hierarchy":
-    - button "Use only Cordis tools. First" [disabled]
+- strong: Use only Cordis tools. First
+- text: LEAD LIVE {{cwd}}/workspace ready
+- button "Focus this agent"
+- navigation "Session hierarchy":
+  - button "Use only Cordis tools. First" [disabled]
+- img
+- text: Standard mode
+- button "Session log":
+  - text: Session log
   - img
-  - text: Standard mode
-  - button "Session log":
-    - text: Session log
-    - img
-  - tablist:
-    - tab "Chat" [selected]
-    - tab "Trajectory"
-- navigation "Turn navigation":
-  - button "Jump to turn 1"
-  - button "Jump to turn 2"
-  - button "Jump to turn 3"
+- tablist:
+  - tab "Chat" [selected]
+  - tab "Trajectory"
 - button "System prompt":
   - img
   - img
