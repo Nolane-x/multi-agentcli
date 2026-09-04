@@ -1,43 +1,50 @@
-CLAUDE.local.md
-.env
+```
+# Dependencies
 node_modules/
-lib/
-*.tsbuildinfo
-pnpm-debug.log
-.pnpm-store/
-.cache/
-examples/*/*.jsonl
-.storages/
-.sessions/
-examples/*/.sessions/
-coverage/
-.coverage-times.json
-.doc-typecheck-*/
-.node-next-types-*/
-.oxlint-contract-*/
-.oxlintrc.contract-*.json
-oxlint-contract-*.ts
-.humanize/
-tmp/
-.claude/commands/
-.claude/launch.json
-.claude/settings.json
+
+# Build artifacts
+**/lib/types/**
+**/lib/types/**/*.js
+**/lib/types/**/*.d.ts
+**/lib/types/**/*.d.ts.map
+
+# Desktop app release
+apps/desktop/release/
+
+# Environment
+.env*
+
+# Logs
+*.log
+
+# IDE
 .vscode/
+.idea/
+
+# OS
 .DS_Store
-.idea
-mise.toml
-dist-exe/
-python/sdk-runtime/src/deepseek_harness_runtime/runtime/deepseek-harness-sdk-runtime-*
-python/sdk-runtime/src/deepseek_harness_runtime/runtime/node/
-python/**/__pycache__/
-python/**/.pytest_cache/
-packages/**/__pycache__/
-apps/web/dist/
-.artifacts/
-.dsh-build/
-.playwright-mcp/
-.orig
-.worktrees/
-worktrees/
-.agents/worktrees/
-.typert-*/
+Thumbs.db
+
+# Archives
+*.zip
+*.tar.gz
+*.tar.xz
+*.tar.bz2
+*.gz
+*.tgz
+*.rar
+*.7z
+*.bz2
+*.xz
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+
+```

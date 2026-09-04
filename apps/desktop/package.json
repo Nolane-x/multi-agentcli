@@ -1,0 +1,76 @@
+{
+  "name": "@deepseek-ai/dsh-desktop",
+  "description": "Desktop application for DeepSeek Harness with floating sidebar and tiled terminal AI agents",
+  "version": "0.1.2-alpha.5",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "apps/desktop"
+  },
+  "main": "dist/main.js",
+  "author": {
+    "name": "DeepSeek AI",
+    "email": "support@deepseek.ai"
+  },
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "electron:dev": "concurrently \"pnpm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:build": "pnpm run build && electron-builder",
+    "electron:build:all": "pnpm run build && electron-builder -mwl"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0",
+    "uuid": "^9.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.0",
+    "@types/uuid": "^9.0.0",
+    "@types/ws": "^8.18.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "concurrently": "^8.2.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0",
+    "vite-plugin-electron": "^0.29.0",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "ai.deepseek.dsh-desktop",
+    "productName": "DeepSeek Harness Desktop",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "Developer Tools",
+      "target": ["dmg", "zip"],
+      "icon": "assets/icon.icns"
+    },
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "assets/icon.ico"
+    },
+    "linux": {
+      "target": ["AppImage", "rpm"],
+      "icon": "assets/icon.png",
+      "category": "Development",
+      "maintainer": "DeepSeek AI <support@deepseek.ai>"
+    }
+  }
+}

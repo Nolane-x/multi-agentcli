@@ -1,0 +1,59 @@
+.terminal-grid-container {
+  flex: 1;
+  margin-left: 280px;
+  padding: 20px;
+  overflow: hidden;
+  background: #1e1e1e;
+}
+
+.terminal-grid {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  height: 100%;
+  transition: all 0.3s ease;
+}
+
+.terminal-grid.maximized {
+  grid-template-columns: 1fr !important;
+  grid-template-rows: 1fr !important;
+}
+
+.add-terminal-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #252526;
+  border: 2px dashed #3c3c3c;
+  border-radius: 12px;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-height: 200px;
+  font-size: 16px;
+}
+
+.add-terminal-btn:hover {
+  border-color: #0e639c;
+  color: #fff;
+  background: #2d2d30;
+}
+
+.plus-icon {
+  font-size: 48px;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .terminal-grid-container {
+    margin-left: 0;
+    padding: 10px;
+  }
+  
+  .terminal-grid {
+    gap: 8px;
+  }
+}
