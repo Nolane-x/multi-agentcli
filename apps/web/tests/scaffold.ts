@@ -863,6 +863,55 @@ function stableSessionFixture(session: Session, existing: string, workspaceCwd: 
   return stable
 }
 
+const CORDIS_PLATFORM_SHELL_PROMPT = 'The active shell reports non-zero exits as `[exit code: N]` markers; '
+  + 'investigate failures before moving on.'
+const CORDIS_BASH_SHELL_PROMPT = 'Check the [exit code: N] marker on every bash result; '
+  + 'investigate failures before moving on.'
+const CORDIS_PWSH_SHELL_PROMPT = 'Non-zero exits are reported as `[exit code: N]` markers; '
+  + 'investigate failures before moving on. On Windows a killed process settles as '
+  + '`[exit code: 1]` without a signal marker; treat a bare exit 1 after an interruption '
+  + 'as a termination, not a command failure.'
+
+function isWebRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizeCordisPlatformShellSchemas(schemaSet: readonly unknown[]): unknown[] {
+  const shellIndex = schemaSet.findIndex(value =>
+    isWebRecord(value) && (value.name === 'bash' || value.name === 'pwsh'))
+  if (shellIndex < 0) return [...schemaSet]
+
+  const shell = schemaSet[shellIndex]
+  if (!isWebRecord(shell) || !isWebRecord(shell.parameters)) return [...schemaSet]
+  const properties = shell.parameters.properties
+  if (!isWebRecord(properties)
+    || !isWebRecord(properties.command)
+    || !isWebRecord(properties.description)) return [...schemaSet]
+
+  const normalizedShell: Record<string, unknown> = {
+    ...shell,
+    name: 'shell',
+    description: 'Execute a shell command and return its stdout/stderr.',
+    parameters: {
+      ...shell.parameters,
+      properties: {
+        ...properties,
+        command: { ...properties.command, description: 'The shell command to execute.' },
+        description: { ...properties.description, description: 'Clear, concise description of this shell command.' },
+      },
+    },
+  }
+  const withoutShell = schemaSet.filter((_value, index) => index !== shellIndex)
+  const anchorIndex = withoutShell.findIndex(value => isWebRecord(value) && value.name === 'ask_user_question')
+  const insertIndex = anchorIndex < 0 ? Math.min(shellIndex, withoutShell.length) : anchorIndex + 1
+  withoutShell.splice(insertIndex, 0, normalizedShell)
+  return withoutShell
+}
+
+function normalizeCordisPlatformSchemas(schemaSets: readonly unknown[][]): unknown[][] {
+  return schemaSets.map(normalizeCordisPlatformShellSchemas)
+}
+
 async function assertReplaySession(
   sessions: readonly Session[],
   fixturePath: string,
@@ -913,12 +962,19 @@ async function assertReplaySession(
   const normalizePrompt = (value: string): string => value
     .split(REPO_ROOT).join('{{sourceRoot}}')
     .split(webUrl).join('{{webUrl}}')
-  const prompts = normalizedSystemPrompts(actual, actualContext).map(normalizePrompt)
+  const cordisPlatformContract = manifest.composition === 'web-cordis'
+  const prompts = normalizedSystemPrompts(actual, actualContext)
+    .map(normalizePrompt)
+    .map(value => cordisPlatformContract
+      ? value.replaceAll(CORDIS_BASH_SHELL_PROMPT, CORDIS_PLATFORM_SHELL_PROMPT)
+        .replaceAll(CORDIS_PWSH_SHELL_PROMPT, CORDIS_PLATFORM_SHELL_PROMPT)
+      : value)
   const schemas = normalizedToolSchemas(actual, actualContext)
+  const stableSchemas = cordisPlatformContract ? normalizeCordisPlatformSchemas(schemas) : schemas
   const promptPath = join(fixtureDir, 'system-prompt.expected.md')
   const schemaPath = join(fixtureDir, 'tool-schemas.expected.json')
   const promptSnapshot = formatSystemPromptSnapshot(prompts[0] as string, prompts.slice(1))
-  const schemaSnapshot = formatToolSchemasSnapshot(schemas[0] as unknown[], schemas.slice(1))
+  const schemaSnapshot = formatToolSchemasSnapshot(stableSchemas[0] as unknown[], stableSchemas.slice(1))
   if (mode === 'refresh') {
     await Promise.all([writeFile(promptPath, promptSnapshot), writeFile(schemaPath, schemaSnapshot)])
   }
