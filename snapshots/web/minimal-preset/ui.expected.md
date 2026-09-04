@@ -1,16 +1,14 @@
-- strong: Use the bash tool to
-- text: LEAD LIVE {{cwd}} ready
-- button "Focus this agent"
-- navigation "Session hierarchy":
-  - button "Use the bash tool to" [disabled]
-- img
-- text: Minimal mode
-- button "Session log":
-  - text: Session log
+- banner:
+  - navigation "Session hierarchy":
+    - button "Use the bash tool to" [disabled]
   - img
-- tablist:
-  - tab "Chat" [selected]
-  - tab "Trajectory"
+  - text: Minimal mode
+  - button "Session log":
+    - text: Session log
+    - img
+  - tablist:
+    - tab "Chat" [selected]
+    - tab "Trajectory"
 - button "System prompt":
   - img
   - img
