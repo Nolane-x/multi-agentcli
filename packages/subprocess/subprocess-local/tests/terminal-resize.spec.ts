@@ -50,7 +50,7 @@ function inspector(): ProcessInspector {
     isAlive: () => true,
     signalGroup: () => {},
     signalProcess: () => {},
-  } as unknown as ProcessInspector
+  }
 }
 
 describe('LocalTerminalHandle resize', () => {

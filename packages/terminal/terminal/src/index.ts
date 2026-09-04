@@ -277,11 +277,10 @@ export class TerminalSessionService extends Service {
   subscribeOutput(owner: Agent, id: TerminalSessionId, listener: (data: string) => void): () => void {
     const record = this.expectOwned(owner, id)
     if (record.closing !== undefined) throw new Error(`PTY session ${id} is closing`)
-    const subscribe = record.session.subscribeOutput
-    if (subscribe === undefined) {
+    if (record.session.subscribeOutput === undefined) {
       throw new TerminalError(`PTY backend "${record.type}" does not support raw output`, 'OUTPUT_UNSUPPORTED')
     }
-    return subscribe.call(record.session, listener)
+    return record.session.subscribeOutput.call(record.session, listener)
   }
 
   /**
@@ -296,11 +295,10 @@ export class TerminalSessionService extends Service {
     if (record.active !== undefined) {
       throw new TerminalError(`PTY session ${id} has an active model send`, 'SEND_ACTIVE')
     }
-    const write = record.session.write
-    if (write === undefined) {
+    if (record.session.write === undefined) {
       throw new TerminalError(`PTY backend "${record.type}" does not support raw input`, 'WRITE_UNSUPPORTED')
     }
-    await write.call(record.session, data)
+    await record.session.write.call(record.session, data)
   }
 
   /**
@@ -315,11 +313,10 @@ export class TerminalSessionService extends Service {
     if (!Number.isSafeInteger(rows) || rows <= 0) throw new Error('PTY resize rows must be a positive safe integer')
     if (!Number.isSafeInteger(cols) || cols <= 0) throw new Error('PTY resize cols must be a positive safe integer')
     if (record.closing !== undefined) throw new Error(`PTY session ${id} is closing`)
-    const resize = record.session.resize
-    if (resize === undefined) {
+    if (record.session.resize === undefined) {
       throw new TerminalError(`PTY backend "${record.type}" does not support live resize`, 'RESIZE_UNSUPPORTED')
     }
-    await resize.call(record.session, rows, cols)
+    await record.session.resize.call(record.session, rows, cols)
   }
 
   /**

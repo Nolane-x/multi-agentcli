@@ -40,7 +40,7 @@ describe('LocalPtySession raw output', () => {
     const session = new LocalPtySession(terminal, config())
     const raw = session as unknown as RawOutputSession
     const received: string[] = []
-    const dispose = raw.subscribeOutput(data => { received.push(data) })
+    const dispose = raw.subscribeOutput((data) => { received.push(data) })
     const lambda = Buffer.from('λ', 'utf8')
 
     terminal.output.write(Buffer.from('\u001b[2J', 'utf8'))
@@ -62,7 +62,7 @@ describe('LocalPtySession raw output', () => {
     const raw = session as unknown as RawOutputSession
     const received: string[] = []
     raw.subscribeOutput(() => { throw new Error('consumer failed') })
-    raw.subscribeOutput(data => { received.push(data) })
+    raw.subscribeOutput((data) => { received.push(data) })
 
     expect(() => { terminal.output.write('\u001b[?25lhello') }).not.toThrow()
     expect(received).toEqual(['\u001b[?25lhello'])

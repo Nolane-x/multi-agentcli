@@ -161,8 +161,8 @@ describe('TerminalControlController', () => {
     await expect(controller.resize({ sessionId: SessionId('owner'), terminalId: '', rows: 1, cols: 1 })).rejects.toMatchObject({ code: 'gateway/bad-request' })
     await expect(controller.resize({ sessionId: SessionId('owner'), terminalId: 'pty', rows: 0, cols: 1 })).rejects.toMatchObject({ code: 'gateway/bad-request' })
     await expect(controller.resize({ sessionId: SessionId('owner'), terminalId: 'pty', rows: 1, cols: Number.POSITIVE_INFINITY })).rejects.toMatchObject({ code: 'gateway/bad-request' })
-    expect(() => controller.signal({ sessionId: SessionId('owner'), terminalId: '', signal: 'SIGINT' })).toThrowError(/terminal id must be non-empty/)
-    expect(() => controller.signal({ sessionId: SessionId('owner'), terminalId: 'pty', signal: 'SIGSTOP' as never })).toThrowError(/unsupported signal/)
+    expect(() => controller.signal({ sessionId: SessionId('owner'), terminalId: '', signal: 'SIGINT' })).toThrow(/terminal id must be non-empty/)
+    expect(() => controller.signal({ sessionId: SessionId('owner'), terminalId: 'pty', signal: 'SIGSTOP' as never })).toThrow(/unsupported signal/)
     await expect(controller.close({ sessionId: SessionId('owner'), terminalId: '' })).rejects.toMatchObject({ code: 'gateway/bad-request' })
   })
 
@@ -181,7 +181,7 @@ describe('TerminalControlController', () => {
       subscribeOutput: () => () => {},
     }, owner))
 
-    expect(() => controller.list({ sessionId: SessionId('owner') })).toThrowError(/rejected by the owner-scoped PTY registry/)
+    expect(() => controller.list({ sessionId: SessionId('owner') })).toThrow(/rejected by the owner-scoped PTY registry/)
     await expect(controller.open({ sessionId: SessionId('owner'), type: 'shell' }, new AbortController().signal)).rejects.toThrow('terminal operation failed')
     await expect(controller.write({ sessionId: SessionId('owner'), terminalId: 'pty', data: 'x' })).rejects.toMatchObject({ code: 'terminal/rejected' })
 
@@ -189,12 +189,12 @@ describe('TerminalControlController', () => {
       listBackends: () => [],
       list: () => { throw 'primitive failure' },
     }, owner))
-    expect(() => primitiveFailure.list({ sessionId: SessionId('owner') })).toThrowError(/terminal operation failed/)
+    expect(() => primitiveFailure.list({ sessionId: SessionId('owner') })).toThrow(/terminal operation failed/)
   })
 
   it('reports missing registry and output subscription failures through stable errors', async () => {
     const missing = new TerminalControlController(testContext())
-    expect(() => missing.backends()).toThrowError(/terminal service is unavailable/)
+    expect(() => missing.backends()).toThrow(/terminal service is unavailable/)
 
     const controller = new TerminalControlController(testContext({
       listBackends: () => [],

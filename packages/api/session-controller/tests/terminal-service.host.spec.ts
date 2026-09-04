@@ -99,7 +99,7 @@ async function harness(sessions: ServiceSession[]): Promise<{ terminals: Termina
   const ctx = new Context()
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(TerminalSessionService)
-  const terminals = ctx.get('terminals' as never) as unknown as TerminalSessionService
+  const terminals = ctx.get('terminals') as TerminalSessionService
   terminals.registerBackend({ type: 'stub', spawn: async () => {
     const session = sessions.shift()
     if (session === undefined) throw new Error('test backend exhausted')

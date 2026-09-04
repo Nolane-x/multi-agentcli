@@ -177,7 +177,7 @@ export class TerminalControlController extends TypertRemoteService {
     const owner = this.owner(request.sessionId)
     const queue = new TerminalOutputQueue()
     const dispose = terminalCall(
-      () => this.registry().subscribeOutput(owner, request.terminalId, data => { queue.push({ data }) }),
+      () => this.registry().subscribeOutput(owner, request.terminalId, (data) => { queue.push({ data }) }),
     )
     try {
       yield* queue.read(signal)
@@ -233,7 +233,7 @@ function terminalCode(error: unknown): string | undefined {
 }
 
 function terminalFailure(error: unknown): RemoteError {
-  if (error instanceof RemoteError) return error
+  if (error instanceof RemoteError) return error as RemoteError
   const code = terminalCode(error)
   if (code !== undefined) {
     return new RemoteError(

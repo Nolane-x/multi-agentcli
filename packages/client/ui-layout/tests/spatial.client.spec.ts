@@ -32,7 +32,7 @@ describe('spatial agent mosaic geometry', () => {
     expect(mosaicCellPercent(10)).toBe(25)
   })
 
-  it.each([-1, Number.POSITIVE_INFINITY, Number.NaN])('rejects invalid agent counts: %s', count => {
+  it.each([-1, Number.POSITIVE_INFINITY, Number.NaN])('rejects invalid agent counts: %s', (count) => {
     expect(() => mosaicDimension(count)).toThrow(RangeError)
   })
 })

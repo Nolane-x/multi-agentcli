@@ -77,7 +77,12 @@ function translate(key: string, params?: Record<string, unknown>): string {
     'spatial.agent.job': 'job:{id}',
     'spatial.agent.agent': 'Agent',
   }
-  return (messages[key] ?? key).replace(/\{(\w+)\}/gu, (_match, name: string) => String(params?.[name] ?? `{${name}}`))
+  return (messages[key] ?? key).replace(/\{(\w+)\}/gu, (_match, name: string) => {
+    const value = params?.[name]
+    if (value === undefined) return `{${name}}`
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value)
+    return JSON.stringify(value) ?? `{${name}}`
+  })
 }
 
 function mountSpatialFrame(
@@ -159,12 +164,12 @@ describe('AppFrame spatial agent canvas', () => {
       byId: {
         ...base.byId,
         [grandchild]: {
-          ...base.byId[grandchild]!,
+          ...base.byId[grandchild],
           parentId: child,
           origin: 'subagent' as const,
         },
       },
-    } as SessionListState
+    }
 
     const { container } = mountSpatialFrame(3, {}, state)
     const rootTile = container.querySelector(`[data-agent-id="${root}"]`) as HTMLElement

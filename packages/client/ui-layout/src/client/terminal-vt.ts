@@ -119,7 +119,9 @@ class VtScreen implements TerminalScreen {
     if (!Number.isInteger(row) || !Number.isInteger(col) || row < 0 || row >= this.rows || col < 0 || col >= this.cols) {
       throw new RangeError('terminal cell address is outside the screen')
     }
-    return { ...this.buffer().cells[row]![col]! }
+    const value = this.buffer().cells[row]?.[col]
+    if (value === undefined) throw new RangeError('terminal cell address is outside the screen')
+    return { ...value }
   }
 
   private consume(char: string): void {
@@ -156,7 +158,8 @@ class VtScreen implements TerminalScreen {
         return
       case '\u0007': return
       default:
-        if (char.codePointAt(0)! < 0x20 || char === '\u007f') return
+        const codePoint = char.codePointAt(0)
+        if (codePoint === undefined || codePoint < 0x20 || char === '\u007f') return
         this.put(char)
     }
   }
@@ -249,7 +252,9 @@ class VtScreen implements TerminalScreen {
       this.lineFeed()
     }
     buffer.wrapPending = false
-    buffer.cells[buffer.row]![buffer.col] = cell(text, this.rendition)
+    const line = buffer.cells[buffer.row]
+    if (line === undefined) throw new RangeError('terminal screen row is unavailable')
+    line[buffer.col] = cell(text, this.rendition)
     if (buffer.col === this.cols - 1) {
       buffer.wrapPending = this.autoWrap
       return
@@ -319,7 +324,8 @@ class VtScreen implements TerminalScreen {
   }
 
   private eraseRange(row: number, start: number, end: number): void {
-    const line = this.buffer().cells[row]!
+    const line = this.buffer().cells[row]
+    if (line === undefined) throw new RangeError('terminal screen row is unavailable')
     for (let col = clamp(start, 0, this.cols - 1); col <= clamp(end, 0, this.cols - 1); col += 1) {
       line[col] = blankCell()
     }
@@ -499,13 +505,18 @@ function parseExtendedColor(
   index: number,
 ): { readonly color: TerminalColor; readonly lastIndex: number } | undefined {
   const mode = params[index + 1]
-  if (mode === 5 && params[index + 2] !== undefined) {
-    return { color: clamp(params[index + 2]!, 0, 255), lastIndex: index + 2 }
+  const colorIndex = index + 2
+  const colorValue = params[colorIndex]
+  if (mode === 5 && colorValue !== undefined) {
+    return { color: clamp(colorValue, 0, 255), lastIndex: colorIndex }
   }
-  if (mode === 2 && params[index + 2] !== undefined && params[index + 3] !== undefined && params[index + 4] !== undefined) {
-    const r = clamp(params[index + 2]!, 0, 255)
-    const g = clamp(params[index + 3]!, 0, 255)
-    const b = clamp(params[index + 4]!, 0, 255)
+  const red = params[colorIndex]
+  const green = params[index + 3]
+  const blue = params[index + 4]
+  if (mode === 2 && red !== undefined && green !== undefined && blue !== undefined) {
+    const r = clamp(red, 0, 255)
+    const g = clamp(green, 0, 255)
+    const b = clamp(blue, 0, 255)
     return { color: `#${hex(r)}${hex(g)}${hex(b)}`, lastIndex: index + 4 }
   }
   return undefined

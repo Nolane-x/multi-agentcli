@@ -2,7 +2,6 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import SessionStore from '@deepseek-ai/dsh-session'
 import { describe, expect, it } from 'vitest'
-import SessionController from '../src/index.ts'
 import { createSessionTestController } from './test-remote.ts'
 
 const defaults = {
@@ -20,10 +19,10 @@ describe('SessionController terminal composition', () => {
       list: () => [],
     } as never)
 
-    const sessionController = createSessionTestController(ctx, defaults) as SessionController
-    await new Promise<void>(resolve => setImmediate(resolve))
+    const sessionController = createSessionTestController(ctx, defaults)
+    await new Promise<void>((resolve) => { setImmediate(resolve) })
 
-    expect(ctx.get('terminalControlController' as never)).toBeDefined()
+    expect(ctx.get('terminalControlController')).toBeDefined()
     expect(Reflect.has(sessionController, 'backends')).toBe(false)
     expect(Reflect.has(sessionController, 'open')).toBe(false)
     expect(Reflect.has(sessionController, 'write')).toBe(false)

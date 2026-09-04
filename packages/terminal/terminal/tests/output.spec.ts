@@ -57,7 +57,7 @@ describe('TerminalSessionService raw output', () => {
     }
     ctx.terminals.registerBackend({
       type: 'stub',
-      spawn: async () => backendSession as TerminalBackendSession,
+      spawn: async () => backendSession,
     })
     const owner = stubAgent(ctx, 'owner')
     const foreign = stubAgent(ctx, 'foreign')
