@@ -352,7 +352,12 @@ export function AppFrame({
   // children remain available for follow-up after their turn finishes. With no
   // selected Session, only ambient running work surfaces.
   const activeAgentIds = useMemo(
-    () => canvasAgentIds(sessionIds, sessionsById, currentSession),
+    // A blank draft is the resident New Session shell, not an agent pane. Do
+    // not let it consume a mosaic cell when the first durable workspace
+    // session materializes; doing so would remount the Hero tree and make the
+    // initial workspace hand-off look like a second agent appeared.
+    () => canvasAgentIds(sessionIds, sessionsById, currentSession)
+      .filter(id => sessionsById[id]?.blank !== true),
     [currentSession, sessionIds, sessionsById],
   )
   const activeSubagentJobs = useMemo(
@@ -527,7 +532,7 @@ export function AppFrame({
   // or terminal is present; the first agent keeps the existing full-page
   // interaction geometry and accessibility tree.
   const mosaicVisible = focusedVisible || visibleTileCount > 1
-  const currentConversation = currentSession === undefined || SessionScope === undefined
+  const currentConversation = !mosaicVisible || currentSession === undefined || SessionScope === undefined
     ? renderSlot('conversation', {})
     : (
       <SessionScope scope="session-maybe" scopeKey={String(currentSession)}>
@@ -599,12 +604,16 @@ export function AppFrame({
               const parentTitle = lineage.parentId === undefined
                 ? undefined
                 : sessionsById[lineage.parentId]?.displayTitle ?? String(lineage.parentId)
-              // Keep one interactive Harness transcript in the document. The
-              // other family members remain visible as spatial previews and
-              // can be opened/focused through their header controls; mounting
-              // several full composers at once duplicates global UI affordances
-              // (tabs, overlays and keyboard targets) inside one page.
-              const conversation = current ? currentConversation : undefined
+              // Pin every visible agent to its own renderer scope. This keeps
+              // the parent workflow record mounted while a child is opened,
+              // so operators can observe and control the whole family at once.
+              const conversation = SessionScope === undefined
+                ? current ? renderSlot('conversation', {}) : undefined
+                : (
+                  <SessionScope scope="session-maybe" scopeKey={String(id)}>
+                    {renderSlot('conversation', {})}
+                  </SessionScope>
+                )
               return (
                 <AgentChrome
                   key={id}

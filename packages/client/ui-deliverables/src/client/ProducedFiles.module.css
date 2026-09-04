@@ -107,7 +107,7 @@
   }
 }
 
-@container (max-width: 583px) {
+@container (max-width: 520px) {
   .file:nth-of-type(5),
   .more[data-shown='5'] {
     display: none;
