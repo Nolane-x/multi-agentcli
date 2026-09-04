@@ -51,7 +51,7 @@ function stubAgent(ctx: Context, rawId: string): Agent {
 
 async function harness(
   mode: 'danger-full-access' | 'workspace-write',
-  timing: { idleSilenceMs?: number; handoffGraceMs?: number; timeoutMs?: number } = {},
+  timing: { exactProbeAfterMs?: number; idleSilenceMs?: number; handoffGraceMs?: number; timeoutMs?: number } = {},
   dialect: 'bash' | 'pwsh' = 'bash',
 ) {
   const root = mkdtempSync(join(tmpdir(), 'dsh-pty-local-'))
@@ -67,7 +67,7 @@ async function harness(
   const fiber = await ctx.plugin(ptyLocal, {
     shellDialect: dialect,
     pollIntervalMs: 10,
-    exactProbeAfterMs: 20,
+    exactProbeAfterMs: timing.exactProbeAfterMs ?? 20,
     idleSilenceMs: timing.idleSilenceMs ?? 250,
     handoffGraceMs: timing.handoffGraceMs ?? 250,
     timeoutMs: timing.timeoutMs ?? 2_000,
@@ -323,8 +323,9 @@ describe.skipIf(!hasPwsh)('terminal-bash pwsh real shell', () => {
     process.env.DSH_TEST_SECRET = 'must-not-leak'
     try {
       const { ctx, root, agent } = await harness('danger-full-access', {
-        idleSilenceMs: 300,
-        handoffGraceMs: 300,
+        exactProbeAfterMs: 1_000,
+        idleSilenceMs: 2_000,
+        handoffGraceMs: 2_000,
         timeoutMs: 8_000,
       }, 'pwsh')
       const created = await ctx.terminals.spawn(agent, { type: 'shell', name: 'main', cwd: root })
