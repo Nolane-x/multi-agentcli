@@ -374,6 +374,8 @@ describe('BashTerminalBackend startup rollback', () => {
         }
       },
       read: () => ({ text: '', totalLines: 0, lineBegin: 0, lineEnd: 0, truncated: false }),
+      beginInitialization: () => {},
+      endInitialization: () => {},
     } as unknown as LocalPtySession
     const backend = new BashTerminalBackend(
       ctx,
@@ -413,6 +415,8 @@ describe('BashTerminalBackend startup rollback', () => {
         }
       },
       read: () => ({ text: '', totalLines: 0, lineBegin: 0, lineEnd: 0, truncated: false }),
+      beginInitialization: () => {},
+      endInitialization: () => {},
     } as unknown as LocalPtySession
     const backend = new BashTerminalBackend(
       ctx,
@@ -442,6 +446,8 @@ describe('BashTerminalBackend startup rollback', () => {
       }),
       read: () => ({ text: '', totalLines: 0, lineBegin: 0, lineEnd: 0, truncated: false }),
       close: () => Promise.resolve(),
+      beginInitialization: () => {},
+      endInitialization: () => {},
     }) as unknown as LocalPtySession
     const exited = new BashTerminalBackend(ctx, { ...config(), shellDialect: 'pwsh' }, async () => terminalHandle(), () => sessionFor('session_exit'))
     await expect(exited.spawn(spec(agent(ctx)))).rejects.toThrow('PTY shell exited during startup')
@@ -482,6 +488,8 @@ describe('BashTerminalBackend startup rollback', () => {
         },
         read: () => ({ text: '', totalLines: 0, lineBegin: 0, lineEnd: 0, truncated: false }),
         close: () => { closes += 1; return Promise.resolve() },
+        beginInitialization: () => {},
+        endInitialization: () => {},
       } as unknown as LocalPtySession
       const backend = new BashTerminalBackend(
         ctx,
@@ -524,6 +532,8 @@ describe('BashTerminalBackend startup rollback', () => {
         }
       },
       read: () => ({ text: '', totalLines: 0, lineBegin: 0, lineEnd: 0, truncated: false }),
+      beginInitialization: () => {},
+      endInitialization: () => {},
     } as unknown as LocalPtySession
     const backend = new BashTerminalBackend(
       ctx,

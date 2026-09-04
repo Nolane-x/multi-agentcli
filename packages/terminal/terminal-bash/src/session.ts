@@ -190,6 +190,8 @@ export class LocalPtySession implements TerminalBackendSession {
   private promptTail = ''
   private shellPgid: number | undefined
   private initializing = false
+  private initializationOutputRevision = 0
+  private outputRevision = 0
   private lastOutputAt = Date.now()
   private closing = false
   private closePromise: Promise<void> | undefined
@@ -236,7 +238,7 @@ export class LocalPtySession implements TerminalBackendSession {
    * @returns Resolves after startup readiness; rejects on exit or readiness timeout.
    */
   async initialize(signal?: AbortSignal): Promise<void> {
-    this.initializing = true
+    this.beginInitialization()
     try {
       const operation = this.startSend({ text: '', submit: false, ...signal !== undefined ? { signal } : {} })
       const result = await operation.done
@@ -247,13 +249,14 @@ export class LocalPtySession implements TerminalBackendSession {
       signal?.throwIfAborted()
       throw error
     } finally {
-      this.initializing = false
+      this.endInitialization()
     }
   }
 
   /** Hold readiness probes until a dialect-specific startup sequence emits output. */
   beginInitialization(): void {
     this.initializing = true
+    this.initializationOutputRevision = this.outputRevision
   }
 
   /** Release the startup-only readiness fence after the initial prompt is accepted. */
@@ -491,6 +494,7 @@ export class LocalPtySession implements TerminalBackendSession {
   }
 
   private onData(data: string): void {
+    if (data.length > 0) this.outputRevision += 1
     const sanitized = this.sanitizer.push(data)
     this.appendOutput(sanitized.text)
     if (sanitized.prompt) {
@@ -569,7 +573,7 @@ export class LocalPtySession implements TerminalBackendSession {
         return
       }
       const elapsed = Date.now() - operation.startedAt
-      const startupHasOutput = !this.initializing || this.scrollback.snapshot().text.length > 0
+      const startupHasOutput = !this.initializing || this.outputRevision > this.initializationOutputRevision
       const acceptsStdinWait = startupHasOutput && foreground !== undefined
         && operation.acceptsStdinWait(foreground.processGroupId, foreground.inputWaiting)
       if (elapsed >= this.config.exactProbeAfterMs && acceptsStdinWait) {
