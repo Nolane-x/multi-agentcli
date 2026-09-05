@@ -612,6 +612,7 @@ export function ChatView({
   // The ref starts null and is assigned every render, so the placeholder
   // initializer a function initial value would need never exists.
   const followRef = useRef<(() => void) | null>(null)
+  const followFrameRef = useRef<number | null>(null)
   followRef.current = () => {
     const local = listRef.current
     if (local !== null && atBottomRef.current) {
@@ -630,6 +631,23 @@ export function ChatView({
       chatScroll.save(null)
     }
   }
+  // A layout observer can run before the browser exposes the final flow
+  // geometry. Follow once immediately for normal updates, then recheck on the
+  // next frame so a pinned reader reaches the final scroll floor after reflow.
+  const scheduleFollowRef = useRef<(() => void) | null>(null)
+  scheduleFollowRef.current = () => {
+    followRef.current?.()
+    if (typeof requestAnimationFrame === 'undefined' || followFrameRef.current !== null) return
+    followFrameRef.current = requestAnimationFrame(() => {
+      followFrameRef.current = null
+      followRef.current?.()
+    })
+  }
+  useEffect(() => () => {
+    if (followFrameRef.current !== null && typeof cancelAnimationFrame !== 'undefined') {
+      cancelAnimationFrame(followFrameRef.current)
+    }
+  }, [])
   // Streaming, tool disclosures, and other flow changes resize the column;
   // the sticky composer resizes outside it. This observer owns ChatView's
   // dynamic-height follow decisions and writes only while the reader is pinned.
@@ -642,7 +660,7 @@ export function ChatView({
     // Flow-height changes (image loads, tool disclosures) move rows across the
     // reading line without a scroll event, so the active mark resyncs here too.
     const observer = new ResizeObserver(() => {
-      followRef.current?.()
+      scheduleFollowRef.current?.()
       activeTurnRef.current?.()
     })
     observer.observe(column)
@@ -664,7 +682,7 @@ export function ChatView({
     if (column === null || local === null || typeof MutationObserver === 'undefined') return
     const scrollport = scrollerOf(local)
     const observer = new MutationObserver(() => {
-      followRef.current?.()
+      scheduleFollowRef.current?.()
       activeTurnRef.current?.()
     })
     observer.observe(scrollport, { childList: true, subtree: true, characterData: true })

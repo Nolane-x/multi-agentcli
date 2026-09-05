@@ -2402,6 +2402,50 @@ describe('ChatView', () => {
     }
   })
 
+  it('rechecks pinned follow after a layout observer runs before final flow geometry', () => {
+    let notify: (() => void) | undefined
+    let nextFrame = 0
+    const frames = new Map<number, FrameRequestCallback>()
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      nextFrame += 1
+      frames.set(nextFrame, callback)
+      return nextFrame
+    })
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => { frames.delete(id) })
+    class ResizeObserverStub {
+      constructor(callback: ResizeObserverCallback) {
+        notify = () => { callback([], this as unknown as ResizeObserver) }
+      }
+
+      observe = vi.fn()
+      disconnect = vi.fn()
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    const host = document.createElement('div')
+    host.setAttribute('data-conversation-scroll', '')
+    document.body.appendChild(host)
+    try {
+      const metrics = installScrollMetrics(host, 1_000, 300)
+      const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
+      render(<h.ChatView {...h.props} />, { container: host })
+      expect(host.scrollTop).toBe(700)
+
+      // The observer can run while the old flow height is still exposed to
+      // layout. The next frame is the first point at which the final height
+      // is observable.
+      act(() => { notify?.() })
+      metrics.setHeight(1_200)
+      act(() => {
+        const pending = [...frames.values()]
+        frames.clear()
+        for (const callback of pending) callback(0)
+      })
+      expect(host.scrollTop).toBe(900)
+    } finally {
+      host.remove()
+    }
+  })
+
   it('follows pinned stream mutations when the flow box keeps its flex size', () => {
     let notify: (() => void) | undefined
     const observe = vi.fn()
