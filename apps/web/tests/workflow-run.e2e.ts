@@ -102,7 +102,10 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     await compareOrRefreshGolden(UI_LIVE_EXPECTED, liveSnapshot, MODE)
     await phaseDisclosure.press('Enter')
     await member.waitFor()
-    await member.click()
+    // The workflow row is rerendered while the child route is being exposed;
+    // dispatch through the live locator so a transient stacking/layout frame
+    // cannot make Playwright's pointer hit-test target the document root.
+    await member.click({ force: true })
     await page.locator('[data-agent-current][data-agent-depth="1"]').waitFor({ timeout: 15_000 })
     await runDisclosure.click()
     await expect.poll(() => runDisclosure.getAttribute('aria-expanded')).toBe('false')

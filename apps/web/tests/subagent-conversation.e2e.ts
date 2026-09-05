@@ -465,6 +465,11 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
 
   it('matches the settled addressed-conversation aria golden and stays clean', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-subagent-aria'))
+    const backToBottom = page.getByRole('button', { name: 'Back to bottom', exact: true })
+    if (await backToBottom.count() > 0) {
+      await backToBottom.click()
+      await expect.poll(() => backToBottom.count(), { timeout: 10_000 }).toBe(0)
+    }
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(AVAILABLE_CHILD_EXPECTED, snapshot, MODE)
     const expanded = await captureExpandedTurnProcessAria(

@@ -1283,13 +1283,25 @@ export async function captureExpandedTurnProcessAria(
   const controls = region.locator('[data-turn-process]')
   const count = await controls.count()
   expect(count).toBeGreaterThan(0)
-  const opened: number[] = []
-  for (let index = 0; index < count; index++) {
-    const control = controls.nth(index)
-    if (!await control.isVisible() || await control.getAttribute('aria-expanded') === 'true') continue
-    await control.click()
-    opened.push(index)
+  const opened = new Set<number>()
+  // A process disclosure can be replaced by the keyed Chat seat while the
+  // preceding disclosure is opening. Re-scan the live locator until every
+  // currently eligible control reports the requested state.
+  for (let pass = 0; pass < 3; pass += 1) {
+    let closed = false
+    for (let index = 0; index < count; index++) {
+      const control = controls.nth(index)
+      if (!await control.isVisible() || await control.getAttribute('aria-expanded') === 'true') continue
+      closed = true
+      await control.click()
+      await expect.poll(() => control.getAttribute('aria-expanded'), { timeout: 5_000 }).toBe('true')
+      opened.add(index)
+    }
+    if (!closed) break
   }
+  await expect.poll(async () => (await controls.evaluateAll(nodes => nodes
+    .filter(node => (node as HTMLElement).offsetParent !== null)
+    .every(node => node.getAttribute('aria-expanded') === 'true'))), { timeout: 5_000 }).toBe(true)
   try {
     if (options.scrollToBottom === true) {
       const backToBottom = region.getByRole('button', { name: 'Back to bottom', exact: true })
@@ -1304,7 +1316,7 @@ export async function captureExpandedTurnProcessAria(
     }
     return await captureStableAria(page, selector, workspaceCwd)
   } finally {
-    for (const index of opened.reverse()) {
+    for (const index of [...opened].reverse()) {
       const control = controls.nth(index)
       if (await control.getAttribute('aria-expanded') === 'true') await control.click()
     }

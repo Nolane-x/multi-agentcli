@@ -646,21 +646,28 @@ export function ChatView({
       activeTurnRef.current?.()
     })
     observer.observe(column)
+    // Under ConversationRoot the host owns the viewport. Its client height
+    // can change independently of the flow column (for example when the
+    // sticky composer settles), so observe that box too or a pinned reader can
+    // be left one layout frame above the new floor.
+    if (scrollport !== local) observer.observe(scrollport)
     if (composer !== null) observer.observe(composer)
     return () => { observer.disconnect() }
   }, [])
 
   // Some streaming updates change text or replace descendants without
-  // changing the column's own flex box. Keep pinned readers following those
-  // mutations as well; the same guard preserves an active reader gesture.
+  // changing the column's own flex box. Observe the owning scrollport so
+  // composer and view mutations share the same pinned-reader decision.
   useEffect(() => {
     const column = columnRef.current
-    if (column === null || typeof MutationObserver === 'undefined') return
+    const local = listRef.current
+    if (column === null || local === null || typeof MutationObserver === 'undefined') return
+    const scrollport = scrollerOf(local)
     const observer = new MutationObserver(() => {
       followRef.current?.()
       activeTurnRef.current?.()
     })
-    observer.observe(column, { childList: true, subtree: true, characterData: true })
+    observer.observe(scrollport, { childList: true, subtree: true, characterData: true })
     return () => { observer.disconnect() }
   }, [])
 

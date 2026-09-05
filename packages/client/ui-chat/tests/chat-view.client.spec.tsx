@@ -2373,6 +2373,35 @@ describe('ChatView', () => {
     expect(observe).toHaveBeenCalledTimes(1)
   })
 
+  it('observes an enclosing conversation host whose viewport can reflow independently', () => {
+    let notify: (() => void) | undefined
+    const observed: Element[] = []
+    class ResizeObserverStub {
+      constructor(callback: ResizeObserverCallback) {
+        notify = () => { callback([], this as unknown as ResizeObserver) }
+      }
+
+      observe = (element: Element): void => { observed.push(element) }
+      disconnect = vi.fn()
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    const host = document.createElement('div')
+    host.setAttribute('data-conversation-scroll', '')
+    document.body.appendChild(host)
+    try {
+      const metrics = installScrollMetrics(host, 1_000, 300)
+      const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
+      render(<h.ChatView {...h.props} />, { container: host })
+      expect(host.scrollTop).toBe(700)
+      metrics.setHeight(1_200)
+      act(() => { notify?.() })
+      expect(host.scrollTop).toBe(900)
+      expect(observed).toContain(host)
+    } finally {
+      host.remove()
+    }
+  })
+
   it('follows pinned stream mutations when the flow box keeps its flex size', () => {
     let notify: (() => void) | undefined
     const observe = vi.fn()
