@@ -613,10 +613,18 @@ export function ChatView({
   // initializer a function initial value would need never exists.
   const followRef = useRef<(() => void) | null>(null)
   followRef.current = () => {
-    if (scrollSamplePendingRef.current) return
     const local = listRef.current
     if (local !== null && atBottomRef.current) {
       const el = scrollerOf(local)
+      // A pending scroll sample may be a delayed browser delivery for our
+      // own bottom write, not reader input. Only hold the follow when the
+      // current position has actually deviated from the last position we
+      // delivered; this keeps a stale programmatic event from blocking a
+      // stream resize forever while preserving an in-flight reader gesture.
+      const floor = Math.max(0, el.scrollHeight - el.clientHeight)
+      const readerMoved = scrollSamplePendingRef.current
+        && Math.abs(el.scrollTop - Math.min(observedTopRef.current, floor)) > 0.5
+      if (readerMoved) return
       el.scrollTop = el.scrollHeight
       observedTopRef.current = el.scrollTop
       chatScroll.save(null)

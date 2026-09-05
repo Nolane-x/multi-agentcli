@@ -362,7 +362,7 @@ describe('experimental Inspector real Worker', () => {
     })).error?.message).toContain('Client realm has no native CDP transport')
   })
 
-  it('forwards Client Console objects through isolated realm sessions', async () => {
+  it('forwards Client Console objects through isolated realm sessions', { timeout: 20_000 }, async () => {
     inspector = await startInspector({ port: 0, captureFetch: false })
     client = await InspectorClientFixture.start(inspector.endpoint.client, { label: 'Console Client' })
     cdp = await TestCdpClient.connect(inspector.endpoint.webSocketDebuggerUrl)

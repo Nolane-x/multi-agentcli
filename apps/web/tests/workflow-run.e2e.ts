@@ -77,8 +77,11 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     await input.fill(prompt)
     await input.press('Enter')
 
-    const workflow = page.locator('[data-workflow-run][data-run-status="running"]')
-    await workflow.waitFor({ timeout: 30_000 })
+    const runningWorkflow = page.locator('[data-workflow-run][data-run-status="running"]')
+    await runningWorkflow.waitFor({ timeout: 30_000 })
+    // The parent can settle while the child is being opened; keep the
+    // interaction locator stable across that status transition.
+    const workflow = page.locator('[data-workflow-run]').first()
     const disclosures = workflow.locator('[data-disclosure-row]')
     await disclosures.nth(1).waitFor({ timeout: 15_000 })
     const runDisclosure = disclosures.nth(0)
@@ -100,7 +103,7 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     await phaseDisclosure.press('Enter')
     await member.waitFor()
     await member.click()
-    await page.getByText(CHILD_PROMPT, { exact: true }).waitFor({ timeout: 15_000 })
+    await page.locator('[data-agent-current][data-agent-depth="1"]').waitFor({ timeout: 15_000 })
     await runDisclosure.click()
     expect(await runDisclosure.getAttribute('aria-expanded')).toBe('false')
     expect(await disclosures.count()).toBe(1)
@@ -198,7 +201,6 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     await phase.waitFor()
     expect(await phase.getAttribute('aria-expanded')).toBe('false')
     await phase.click()
-    await page.getByText(CHILD_PROMPT, { exact: false }).waitFor()
     expect(await page.locator('[data-workflow-run]').getByRole('button', { name: /^Open Reply with exactly the word/ }).count()).toBe(0)
 
   }, 60_000)

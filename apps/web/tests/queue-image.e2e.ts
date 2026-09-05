@@ -106,6 +106,14 @@ describe('web e2e: queued image submission', () => {
     await expect.poll(() => dockThumb.getAttribute('src')).toMatch(/^blob:/)
     await page.getByText(QUEUED_TEXT, { exact: true }).waitFor()
     await page.getByRole('button', { name: 'Remove queued message' }).waitFor({ timeout: 15_000 })
+    await page.mouse.move(0, 0)
+    await page.evaluate(() => {
+      const active = document.activeElement
+      if (active instanceof HTMLElement) active.blur()
+    })
+    await expect.poll(
+      () => page.getByRole('tooltip', { name: 'Send message', exact: true }).count(),
+    ).toBe(0)
     const queuedSnapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(QUEUED_EXPECTED, queuedSnapshot, MODE)
 
