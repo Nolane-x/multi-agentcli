@@ -43,10 +43,9 @@ async function pasteImage(page: Page, bytes: Uint8Array): Promise<void> {
 
 async function hideSendTooltip(page: Page): Promise<void> {
   // The stop control is replaced by the send control in the same toolbar
-  // position. Move onto the editor so the replacement receives a real
-  // mouseleave, rather than relying on a viewport-corner move that can still
-  // leave the pointer over the new button in a short reflow.
-  await page.locator('[data-composer-input]').first().hover()
+  // position. Move outside the viewport so the replacement cannot inherit a
+  // hover trigger during the short reflow.
+  await page.mouse.move(-10, -10)
   await page.evaluate(() => {
     const active = document.activeElement
     if (active instanceof HTMLElement) active.blur()

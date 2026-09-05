@@ -662,12 +662,11 @@ async function waitForPersistedInboxMessage(
       }) ?? false
       if (!matched) throw timeoutError()
     }, { interval: WAIT_POLL_INTERVAL_MS, timeout: timeoutMs })
-  } catch (error) {
+  } catch {
     // Under a busy coverage partition, vi.waitFor can reach its deadline while
     // the async filesystem probe is still pending and replace the callback's
     // diagnostic with its generic timeout. Preserve this helper's contract.
-    if (error instanceof Error && error.message === 'Timed out in waitFor!') throw timeoutError()
-    throw error
+    throw timeoutError()
   }
 }
 

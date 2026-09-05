@@ -1293,7 +1293,10 @@ export async function captureExpandedTurnProcessAria(
       const control = controls.nth(index)
       if (!await control.isVisible() || await control.getAttribute('aria-expanded') === 'true') continue
       closed = true
-      await control.click()
+      // The Chat seat can replace the button while a preceding disclosure is
+      // settling. Dispatch against the live DOM node so Playwright does not
+      // scroll or retain a coordinate for the replaced control.
+      await control.evaluate((element) => { (element as HTMLButtonElement).click() })
       await expect.poll(() => control.getAttribute('aria-expanded'), { timeout: 5_000 }).toBe('true')
       opened.add(index)
     }
@@ -1318,7 +1321,9 @@ export async function captureExpandedTurnProcessAria(
   } finally {
     for (const index of [...opened].reverse()) {
       const control = controls.nth(index)
-      if (await control.getAttribute('aria-expanded') === 'true') await control.click()
+      if (await control.getAttribute('aria-expanded') === 'true') {
+        await control.evaluate((element) => { (element as HTMLButtonElement).click() })
+      }
     }
   }
 }
