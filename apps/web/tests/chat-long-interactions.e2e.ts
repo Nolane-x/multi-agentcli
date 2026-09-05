@@ -227,7 +227,10 @@ describe('web e2e: long Chat interaction contract', () => {
     await loadEarlier.click()
     // Paging converts marks to their loaded form without moving the
     // fixed-pitch ladder.
-    await expect.poll(() => loadedMarks.count(), { timeout: 15_000 }).toBeGreaterThan(loadedBefore)
+    // The first history page crosses the scaffold's remote boundary. Keep
+    // this I/O wait aligned with the long-scroll contract so a busy CI runner
+    // cannot report a false failure while the page is still in flight.
+    await expect.poll(() => loadedMarks.count(), { timeout: 30_000 }).toBeGreaterThan(loadedBefore)
     expect(await firstTurnButton.evaluate(button => (
       button.parentElement?.style.getPropertyValue('--turn-natural-position') ?? ''
     ))).toBe(firstTurnPosition)
