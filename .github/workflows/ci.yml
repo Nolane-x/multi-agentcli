@@ -90,7 +90,10 @@ jobs:
       DSH_NODE_COMPAT_SKIP_TYPECHECK: '1'
       DSH_OXLINT_THREADS: '8'
       DSH_PUBLINT_CONCURRENCY: '8'
-      DSH_WEB_SNAPSHOT_WORKERS: '6'
+      # Browser scenarios each own a scaffold, replay session, and Chromium
+      # instance. Keep the bounded pool below the runner's contention point so
+      # one slow scenario cannot starve the other owners and cascade failures.
+      DSH_WEB_SNAPSHOT_WORKERS: '2'
       DSH_GATE_FAIL_FAST: '1'
     steps:
       - uses: actions/checkout@v6
