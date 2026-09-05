@@ -413,11 +413,41 @@ async function expectSameFlowTop(
 }
 
 async function expectBottom(page: Page): Promise<void> {
-  await expect.poll(async () => Math.abs((await scrollGeometry(page)).distanceFromBottom), {
-    // Browser layout can settle behind the scaffold's stream commit on a
-    // constrained runner; keep polling long enough to observe the final floor.
-    timeout: 30_000,
-  }).toBeLessThanOrEqual(1)
+  try {
+    await expect.poll(async () => Math.abs((await scrollGeometry(page)).distanceFromBottom), {
+      // Browser layout can settle behind the scaffold's stream commit on a
+      // constrained runner; keep polling long enough to observe the final floor.
+      timeout: 30_000,
+    }).toBeLessThanOrEqual(1)
+  } catch (error) {
+    const diagnostics = await page.locator('[data-conversation-scroll]').evaluate((host) => {
+      const rectOf = (node: Element | null) => {
+        if (!(node instanceof HTMLElement)) return null
+        const rect = node.getBoundingClientRect()
+        return { top: rect.top, bottom: rect.bottom, height: rect.height }
+      }
+      const session = host.querySelector('[data-slot="conversation.session"]')
+      const chatRoot = session?.querySelector('[class*="root"]') ?? null
+      const chatScroll = session?.querySelector('[class*="scroll"]') ?? null
+      const composer = host.querySelector('[data-composer-seat]')
+      return {
+        host: {
+          scrollTop: host.scrollTop,
+          scrollHeight: host.scrollHeight,
+          clientHeight: host.clientHeight,
+          distanceFromBottom: host.scrollHeight - host.clientHeight - host.scrollTop,
+          rect: rectOf(host),
+        },
+        session: rectOf(session),
+        chatRoot: rectOf(chatRoot),
+        chatScroll: rectOf(chatScroll),
+        composer: rectOf(composer),
+        backToBottom: host.querySelector('[aria-label="Back to bottom"]') !== null,
+      }
+    })
+    console.error(`CHAT_SCROLL_BOTTOM_DEBUG ${JSON.stringify(diagnostics)}`)
+    throw error
+  }
 }
 
 async function expectMarkerAboveComposer(page: Page, marker: string): Promise<void> {
