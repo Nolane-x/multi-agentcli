@@ -2343,6 +2343,28 @@ describe('ChatView', () => {
     expect(view.getByLabelText('回到底部')).toBeTruthy()
   })
 
+  it('lets a new submission reclaim the tail while an old scroll sample is pending', () => {
+    const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
+    const metrics = installScrollMetrics(scroller, 1_000, 300)
+    scroller.scrollTop = 700
+    fireEvent.scroll(scroller)
+    fireEvent(scroller, new Event('scrollend'))
+
+    // The reader is away from the tail, then a delayed delivery arrives
+    // without changing geometry. A new submission must still become visible.
+    readerScroll(scroller, 100)
+    fireEvent.scroll(scroller)
+    metrics.setHeight(1_200)
+    act(() => {
+      h.setChat({ nodes: [user(1, 'q'), assistant(2, 'a'), user(3, 'new submission')] })
+    })
+
+    expect(scroller.scrollTop).toBe(900)
+    expect(view.queryByLabelText('回到底部')).toBeNull()
+  })
+
   it('one ResizeObserver owns pinned dynamic-height follow and ignores growth while away', () => {
     let notify: (() => void) | undefined
     const observe = vi.fn()

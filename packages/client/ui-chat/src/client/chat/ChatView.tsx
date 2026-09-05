@@ -468,11 +468,17 @@ export function ChatView({
   }
 
   useLayoutEffect(() => {
-    if (scrollSamplePendingRef.current) return
     const local = listRef.current
     /* v8 ignore next -- ref-null guard: React attaches the ref before layout effects run. */
     if (local === null) return
     const el = scrollerOf(local)
+    // A delayed scroll sample must not hide a newly submitted message. The
+    // submission is an explicit reader action and owns the tail even when a
+    // browser focus/reflow scroll made the previous sample look away from it.
+    const appendedUser = lastKey !== lastKeyRef.current && lastNode?.kind === 'user'
+    const appendedSteering = lastSteeringId !== null && lastSteeringId !== lastSteeringIdRef.current
+    const appendedSubmission = lastSubmissionId !== null && lastSubmissionId !== lastSubmissionIdRef.current
+    if (scrollSamplePendingRef.current && !appendedUser && !appendedSteering && !appendedSubmission) return
     // Open completed: jump to the bottom once — unless a scroll position
     // survives from a previous mount (view-tab switch away and back), which
     // is restored instead of snapping the reader back to the floor.
@@ -525,9 +531,6 @@ export function ChatView({
     firstSeqRef.current = firstSeq
     // Own words must be visible: a new trailing user node force-scrolls
     // (send lives in the composer, so arrival is detected here, not armed there).
-    const appendedUser = lastKey !== lastKeyRef.current && lastNode?.kind === 'user'
-    const appendedSteering = lastSteeringId !== null && lastSteeringId !== lastSteeringIdRef.current
-    const appendedSubmission = lastSubmissionId !== null && lastSubmissionId !== lastSubmissionIdRef.current
     const tipMoved = followSigRef.current !== followSig
     lastKeyRef.current = lastKey
     lastSteeringIdRef.current = lastSteeringId
