@@ -2446,6 +2446,27 @@ describe('ChatView', () => {
     }
   })
 
+  it('rechecks pinned follow after a late stream render without observer growth', () => {
+    const host = document.createElement('div')
+    host.setAttribute('data-conversation-scroll', '')
+    document.body.appendChild(host)
+    try {
+      const metrics = installScrollMetrics(host, 1_000, 300)
+      const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
+      render(<h.ChatView {...h.props} />, { container: host })
+      expect(host.scrollTop).toBe(700)
+
+      // The stream can commit a text update after the host's measured boxes
+      // have already settled; no ResizeObserver callback is required for this
+      // render-only path.
+      metrics.setHeight(1_200)
+      act(() => { h.setChat({ nodes: [user(1, 'q'), assistant(2, 'a later')] }) })
+      expect(host.scrollTop).toBe(900)
+    } finally {
+      host.remove()
+    }
+  })
+
   it('follows pinned stream mutations when the flow box keeps its flex size', () => {
     let notify: (() => void) | undefined
     const observe = vi.fn()

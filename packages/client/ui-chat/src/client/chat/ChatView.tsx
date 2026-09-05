@@ -309,6 +309,8 @@ export function ChatView({
   const [atBottom, setAtBottom] = useState(() => chatScroll.read() === null)
   const atBottomRef = useRef(atBottom)
   const scrollSamplePendingRef = useRef(false)
+  /** Keep a near-floor position chosen by the reader from being re-snapped. */
+  const readerMovedSinceFollowRef = useRef(false)
   const [, setScrollSampleTick] = useState(0)
   const [activeTurn, setActiveTurn] = useState<number | null>(
     () => turnNavigationItems.at(-1)?.turn ?? null,
@@ -402,6 +404,7 @@ export function ChatView({
 
   const toBottom = (el: HTMLElement): void => {
     anchorRef.current = null
+    readerMovedSinceFollowRef.current = false
     // Returning to the live tail supersedes a jump still landing.
     pendingJumpRef.current = null
     setBusyJumpTurn(current => current === null ? current : null)
@@ -556,6 +559,7 @@ export function ChatView({
     // the current ownership state.
     const floor = Math.max(0, el.scrollHeight - el.clientHeight)
     const movedByReader = Math.abs(el.scrollTop - Math.min(observedTopRef.current, floor)) > 0.5
+    if (movedByReader) readerMovedSinceFollowRef.current = floor - el.scrollTop > 1
     const isAtBottom = movedByReader
       ? floor - el.scrollTop <= FOLLOW_THRESHOLD + 1
       : atBottomRef.current
@@ -623,6 +627,7 @@ export function ChatView({
       // delivered; this keeps a stale programmatic event from blocking a
       // stream resize forever while preserving an in-flight reader gesture.
       const floor = Math.max(0, el.scrollHeight - el.clientHeight)
+      if (readerMovedSinceFollowRef.current) return
       const readerMoved = scrollSamplePendingRef.current
         && Math.abs(el.scrollTop - Math.min(observedTopRef.current, floor)) > 0.5
       if (readerMoved) return
@@ -643,6 +648,12 @@ export function ChatView({
       followRef.current?.()
     })
   }
+  // A streaming render can expose new flow height without changing the
+  // observed boxes. Recheck after every commit so a pinned host catches that
+  // late layout while a reader who moved away remains untouched.
+  useLayoutEffect(() => {
+    scheduleFollowRef.current?.()
+  })
   useEffect(() => () => {
     if (followFrameRef.current !== null && typeof cancelAnimationFrame !== 'undefined') {
       cancelAnimationFrame(followFrameRef.current)

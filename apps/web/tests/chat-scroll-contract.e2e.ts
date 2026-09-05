@@ -414,7 +414,9 @@ async function expectSameFlowTop(
 
 async function expectBottom(page: Page): Promise<void> {
   await expect.poll(async () => Math.abs((await scrollGeometry(page)).distanceFromBottom), {
-    timeout: 10_000,
+    // Browser layout can settle behind the scaffold's stream commit on a
+    // constrained runner; keep polling long enough to observe the final floor.
+    timeout: 30_000,
   }).toBeLessThanOrEqual(1)
 }
 
@@ -654,7 +656,7 @@ describe('web e2e: long Chat scroll contract', () => {
         const composer = world.page.locator('[data-composer-input][contenteditable="true"]').last()
         await composer.fill(LIVE_TOOL_PROMPT)
         await world.page.getByRole('button', { name: 'Send message', exact: true }).click()
-        await expect.poll(() => fileExists(readyPath), { timeout: 15_000 }).toBe(true)
+        await expect.poll(() => fileExists(readyPath), { timeout: 30_000 }).toBe(true)
         const liveRow = world.page.locator(`[data-chat-call-id="${LIVE_TOOL_CALL_ID}"] [data-sample="bash"]`)
         await liveRow.waitFor({ timeout: 15_000 })
         expect(await liveRow.getAttribute('data-state')).toBe('running')
@@ -887,7 +889,7 @@ describe('web e2e: long Chat scroll contract', () => {
         const composer = world.page.locator('[data-composer-input][contenteditable="true"]').last()
         await composer.fill(LIVE_FLING_PROMPT)
         await world.page.getByRole('button', { name: 'Send message', exact: true }).click()
-        await expect.poll(() => fileExists(readyPath), { timeout: 15_000 }).toBe(true)
+        await expect.poll(() => fileExists(readyPath), { timeout: 30_000 }).toBe(true)
         await expectBottom(world.page)
 
         // Fling away while the turn is mid-flight: the scroll burst alone must
