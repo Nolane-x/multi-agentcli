@@ -174,6 +174,13 @@ describe('web e2e: long Chat interaction contract', () => {
 
   it.skipIf(MODE === 'record')('keeps heterogeneous rows and their actions bound to exact semantic identities', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-chat-long-interactions'))
+    // The page can paint the resumed transcript one turn before the in-process
+    // Agent registry publishes its live handle. Wait for that readiness barrier
+    // before reading the source used to validate the semantic identities.
+    await expect.poll(
+      () => scaffold.ctx.agents.get(SessionId(SESSION_ID)) !== undefined,
+      { timeout: 30_000 },
+    ).toBe(true)
     const source = scaffold.ctx.agents.get(SessionId(SESSION_ID))
     if (source === undefined) throw new Error('seeded long-history agent is not attached')
 
