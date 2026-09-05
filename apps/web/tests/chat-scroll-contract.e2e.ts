@@ -890,6 +890,12 @@ describe('web e2e: long Chat scroll contract', () => {
         await composer.fill(LIVE_FLING_PROMPT)
         await world.page.getByRole('button', { name: 'Send message', exact: true }).click()
         await expect.poll(() => fileExists(readyPath), { timeout: 30_000 }).toBe(true)
+        // The tool's readiness file is produced before its live row necessarily
+        // commits. Wait for the same DOM barrier as the long-tool scenario so
+        // the first floor assertion observes the active stream layout.
+        const liveRow = world.page.locator(`[data-chat-call-id="${LIVE_TOOL_CALL_ID}"] [data-sample="bash"]`)
+        await liveRow.waitFor({ timeout: 30_000 })
+        expect(await liveRow.getAttribute('data-state')).toBe('running')
         await expectBottom(world.page)
 
         // Fling away while the turn is mid-flight: the scroll burst alone must
