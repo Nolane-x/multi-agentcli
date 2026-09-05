@@ -41,6 +41,20 @@ async function pasteImage(page: Page, bytes: Uint8Array): Promise<void> {
   }, [...bytes])
 }
 
+async function hideSendTooltip(page: Page): Promise<void> {
+  // The stop control is replaced by the send control in the same toolbar
+  // position. Move outside the viewport so the replacement cannot inherit a
+  // hover trigger during the short reflow.
+  await page.mouse.move(-10, -10)
+  await page.evaluate(() => {
+    const active = document.activeElement
+    if (active instanceof HTMLElement) active.blur()
+  })
+  await expect.poll(
+    () => page.getByRole('tooltip', { name: 'Send message', exact: true }).count(),
+  ).toBe(0)
+}
+
 describe('web e2e: queued image submission', () => {
   let scaffold: WebScaffold | undefined
   let browser: Browser | undefined
@@ -106,6 +120,7 @@ describe('web e2e: queued image submission', () => {
     await expect.poll(() => dockThumb.getAttribute('src')).toMatch(/^blob:/)
     await page.getByText(QUEUED_TEXT, { exact: true }).waitFor()
     await page.getByRole('button', { name: 'Remove queued message' }).waitFor({ timeout: 15_000 })
+    await hideSendTooltip(page)
     const queuedSnapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(QUEUED_EXPECTED, queuedSnapshot, MODE)
 
@@ -136,6 +151,7 @@ describe('web e2e: queued image submission', () => {
     ).toBe(0)
     const chatImage = page.locator('[class*="userRow"] img')
     await chatImage.first().waitFor({ timeout: 15_000 })
+    await hideSendTooltip(page)
     const deliveredSnapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(DELIVERED_EXPECTED, deliveredSnapshot, MODE)
 

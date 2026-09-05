@@ -309,6 +309,8 @@ export function ChatView({
   const [atBottom, setAtBottom] = useState(() => chatScroll.read() === null)
   const atBottomRef = useRef(atBottom)
   const scrollSamplePendingRef = useRef(false)
+  /** Keep a near-floor position chosen by the reader from being re-snapped. */
+  const readerMovedSinceFollowRef = useRef(false)
   const [, setScrollSampleTick] = useState(0)
   const [activeTurn, setActiveTurn] = useState<number | null>(
     () => turnNavigationItems.at(-1)?.turn ?? null,
@@ -402,6 +404,7 @@ export function ChatView({
 
   const toBottom = (el: HTMLElement): void => {
     anchorRef.current = null
+    readerMovedSinceFollowRef.current = false
     // Returning to the live tail supersedes a jump still landing.
     pendingJumpRef.current = null
     setBusyJumpTurn(current => current === null ? current : null)
@@ -465,11 +468,17 @@ export function ChatView({
   }
 
   useLayoutEffect(() => {
-    if (scrollSamplePendingRef.current) return
     const local = listRef.current
     /* v8 ignore next -- ref-null guard: React attaches the ref before layout effects run. */
     if (local === null) return
     const el = scrollerOf(local)
+    // A delayed scroll sample must not hide a newly submitted message. The
+    // submission is an explicit reader action and owns the tail even when a
+    // browser focus/reflow scroll made the previous sample look away from it.
+    const appendedUser = lastKey !== lastKeyRef.current && lastNode?.kind === 'user'
+    const appendedSteering = lastSteeringId !== null && lastSteeringId !== lastSteeringIdRef.current
+    const appendedSubmission = lastSubmissionId !== null && lastSubmissionId !== lastSubmissionIdRef.current
+    if (scrollSamplePendingRef.current && !appendedUser && !appendedSteering && !appendedSubmission) return
     // Open completed: jump to the bottom once — unless a scroll position
     // survives from a previous mount (view-tab switch away and back), which
     // is restored instead of snapping the reader back to the floor.
@@ -522,9 +531,6 @@ export function ChatView({
     firstSeqRef.current = firstSeq
     // Own words must be visible: a new trailing user node force-scrolls
     // (send lives in the composer, so arrival is detected here, not armed there).
-    const appendedUser = lastKey !== lastKeyRef.current && lastNode?.kind === 'user'
-    const appendedSteering = lastSteeringId !== null && lastSteeringId !== lastSteeringIdRef.current
-    const appendedSubmission = lastSubmissionId !== null && lastSubmissionId !== lastSubmissionIdRef.current
     const tipMoved = followSigRef.current !== followSig
     lastKeyRef.current = lastKey
     lastSteeringIdRef.current = lastSteeringId
@@ -556,6 +562,7 @@ export function ChatView({
     // the current ownership state.
     const floor = Math.max(0, el.scrollHeight - el.clientHeight)
     const movedByReader = Math.abs(el.scrollTop - Math.min(observedTopRef.current, floor)) > 0.5
+    if (movedByReader) readerMovedSinceFollowRef.current = floor - el.scrollTop > 1
     const isAtBottom = movedByReader
       ? floor - el.scrollTop <= FOLLOW_THRESHOLD + 1
       : atBottomRef.current
@@ -612,16 +619,49 @@ export function ChatView({
   // The ref starts null and is assigned every render, so the placeholder
   // initializer a function initial value would need never exists.
   const followRef = useRef<(() => void) | null>(null)
+  const followFrameRef = useRef<number | null>(null)
   followRef.current = () => {
-    if (scrollSamplePendingRef.current) return
     const local = listRef.current
     if (local !== null && atBottomRef.current) {
       const el = scrollerOf(local)
+      // A pending scroll sample may be a delayed browser delivery for our
+      // own bottom write, not reader input. Only hold the follow when the
+      // current position has actually deviated from the last position we
+      // delivered; this keeps a stale programmatic event from blocking a
+      // stream resize forever while preserving an in-flight reader gesture.
+      const floor = Math.max(0, el.scrollHeight - el.clientHeight)
+      if (readerMovedSinceFollowRef.current) return
+      const readerMoved = scrollSamplePendingRef.current
+        && Math.abs(el.scrollTop - Math.min(observedTopRef.current, floor)) > 0.5
+      if (readerMoved) return
       el.scrollTop = el.scrollHeight
       observedTopRef.current = el.scrollTop
       chatScroll.save(null)
     }
   }
+  // A layout observer can run before the browser exposes the final flow
+  // geometry. Follow once immediately for normal updates, then recheck on the
+  // next frame so a pinned reader reaches the final scroll floor after reflow.
+  const scheduleFollowRef = useRef<(() => void) | null>(null)
+  scheduleFollowRef.current = () => {
+    followRef.current?.()
+    if (typeof requestAnimationFrame === 'undefined' || followFrameRef.current !== null) return
+    followFrameRef.current = requestAnimationFrame(() => {
+      followFrameRef.current = null
+      followRef.current?.()
+    })
+  }
+  // A streaming render can expose new flow height without changing the
+  // observed boxes. Recheck after every commit so a pinned host catches that
+  // late layout while a reader who moved away remains untouched.
+  useLayoutEffect(() => {
+    scheduleFollowRef.current?.()
+  })
+  useEffect(() => () => {
+    if (followFrameRef.current !== null && typeof cancelAnimationFrame !== 'undefined') {
+      cancelAnimationFrame(followFrameRef.current)
+    }
+  }, [])
   // Streaming, tool disclosures, and other flow changes resize the column;
   // the sticky composer resizes outside it. This observer owns ChatView's
   // dynamic-height follow decisions and writes only while the reader is pinned.
@@ -634,11 +674,32 @@ export function ChatView({
     // Flow-height changes (image loads, tool disclosures) move rows across the
     // reading line without a scroll event, so the active mark resyncs here too.
     const observer = new ResizeObserver(() => {
-      followRef.current?.()
+      scheduleFollowRef.current?.()
       activeTurnRef.current?.()
     })
     observer.observe(column)
+    // Under ConversationRoot the host owns the viewport. Its client height
+    // can change independently of the flow column (for example when the
+    // sticky composer settles), so observe that box too or a pinned reader can
+    // be left one layout frame above the new floor.
+    if (scrollport !== local) observer.observe(scrollport)
     if (composer !== null) observer.observe(composer)
+    return () => { observer.disconnect() }
+  }, [])
+
+  // Some streaming updates change text or replace descendants without
+  // changing the column's own flex box. Observe the owning scrollport so
+  // composer and view mutations share the same pinned-reader decision.
+  useEffect(() => {
+    const column = columnRef.current
+    const local = listRef.current
+    if (column === null || local === null || typeof MutationObserver === 'undefined') return
+    const scrollport = scrollerOf(local)
+    const observer = new MutationObserver(() => {
+      scheduleFollowRef.current?.()
+      activeTurnRef.current?.()
+    })
+    observer.observe(scrollport, { childList: true, subtree: true, characterData: true })
     return () => { observer.disconnect() }
   }, [])
 

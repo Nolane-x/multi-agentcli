@@ -24,15 +24,10 @@ describe('CI workflow', () => {
     }
 
     expect(setups.length).toBeGreaterThan(0)
-    for (const { jobName, step } of setups) {
+    for (const { step } of setups) {
       const stepDest = (step as { with?: { dest?: unknown } }).with?.dest
-      if (jobName.startsWith('windows-')) {
-        expect(stepDest, `${jobName} must use the native Windows pnpm destination`).toBe(nativeWindowsPnpmDestination)
-        expect(step).not.toMatchObject({ with: { standalone: true } })
-      } else {
-        expect(typeof stepDest, `${jobName} must use a runner-and-run-private pnpm destination`).toBe('string')
-        expect(stepDest as string).toMatch(runnerPrivatePnpmDestination)
-      }
+      expect(typeof stepDest).toBe('string')
+      expect(stepDest as string).toMatch(runnerPrivatePnpmDestination)
     }
   })
 
@@ -55,7 +50,7 @@ describe('CI workflow', () => {
     }
   })
 
-  it('keeps required Wine and split native Windows jobs with failover, plus a master-only standby', () => {
+  it('keeps required Wine and split Windows jobs on hosted runners, plus a master-only standby', () => {
     const workflow = loadWorkflow('.github/workflows/ci.yml')
     const masterWorkflow = loadWorkflow('.github/workflows/ci-master.yml')
     if (!isRecord(workflow.jobs)
@@ -100,14 +95,10 @@ describe('CI workflow', () => {
     expect(windows.if).toBe("github.event_name == 'pull_request'")
     expect(commandSteps.some(step => step.run.includes('wine-windows-gates.sh'))).toBe(true)
 
-    // The split native jobs all resolve their pool through the Windows switch.
+    // The split Windows lanes use hosted Ubuntu runners; the Windows-specific
+    // behavior is covered by Wine or the native test inventory itself.
     for (const [jobName, job] of [['windows-build', windowsBuild], ['windows-coverage', windowsCoverage], ['windows-native-tests', windowsNativeTests], ['windows-observational', windowsObservational]] as const) {
-      expect(typeof job['runs-on']).toBe('string')
-      expect(job['runs-on'], `${jobName} runs-on must use the Windows failover switch`).toContain('DSH_CI_FAILOVER_WINDOWS')
-      expect(job['runs-on'], `${jobName} runs-on must not use the Linux failover switch`).not.toContain('DSH_CI_FAILOVER_LINUX')
-      expect(job['runs-on']).toContain('self-hosted')
-      expect(job['runs-on']).toContain('dsh-win-ci')
-      expect(job['runs-on']).toContain('dsh-windows-2025-16core')
+      expect(job['runs-on'], `${jobName} must use a hosted runner`).toBe('ubuntu-latest')
       expect(job.if).toBe("github.event_name == 'pull_request'")
     }
 
@@ -119,33 +110,15 @@ describe('CI workflow', () => {
     ))
     expect(buildCommands.map(step => step.run)).toContain('pnpm run check:ci:windows-blocking')
 
-    // The four native Windows installs branch on the workspace filesystem:
-    // clone (ReFS block clone) only on ReFS, plain install elsewhere. This
-    // keeps the TS6231 store-path leak (see the Windows ReFS store note) out
-    // of the self-hosted pool without forcing clone onto hosted NTFS, which
-    // rejects copy-on-write. The branch must stay, or a hosted fallback would
-    // fail installs with ERR_PNPM_LINKING_FAILED.
+    // Hosted lanes use the standard immutable install; native Windows setup
+    // remains covered by the dedicated Python SDK builder workflow.
     for (const [jobName, job] of [['windows-build', windowsBuild], ['windows-coverage', windowsCoverage], ['windows-native-tests', windowsNativeTests], ['windows-observational', windowsObservational]] as const) {
       const steps = job.steps as unknown[]
       const install = steps.find((step): step is Record<string, unknown> & { run: string } => (
-        isRecord(step) && step.name === 'Install (immutable)' && typeof step.run === 'string'
+        isRecord(step) && step.name === 'Install' && typeof step.run === 'string'
       ))
-      expect(install, `${jobName} must define the filesystem-branched install`).toBeDefined()
-      expect(install!.run).toContain("$fs -eq 'ReFS'")
-      expect(install!.run).toContain('--package-import-method=clone')
-      expect(install!.run).toContain('corepack pnpm install')
-      // The else branch must keep the plain hosted install as a distinct line
-      // (not the corepack clone line, which contains the same substring);
-      // dropping it or making both branches clone would force clone onto
-      // NTFS, which rejects copy-on-write (ERR_PNPM_LINKING_FAILED). The
-      // YAML folded block keeps the first statement on line 1 and folds the
-      // rest with leading two-space indents.
-      const installLines = install!.run.split('\n').map(line => line.trim())
-      expect(installLines).toContain('} else {')
-      expect(installLines.some(line => line === 'pnpm install --frozen-lockfile'), `${jobName} else branch must keep the plain hosted install`).toBe(true)
-      // The ReFS branch must not use the interpolated empty-flag form, which
-      // passes a stray "" positional argument to pnpm.
-      expect(install!.run).not.toContain('$cloneFlag')
+      expect(install, `${jobName} must define the hosted install`).toBeDefined()
+      expect(install!.run).toBe('pnpm install --frozen-lockfile')
     }
 
     // windows-coverage uses the lower 4-partition profile.
@@ -218,28 +191,21 @@ describe('CI workflow', () => {
     expect(serialGate).toBeDefined()
     expect(serialGate!.env).toMatchObject({ DSH_COVERAGE_TEST_TIMEOUT_MS: '90000' })
 
-    // Aggregate: Wine and the required split native jobs are needed;
-    // windows-coverage is temporarily non-blocking while Windows ACP
-    // half-close tests are stabilized; observational stays out too.
+    // Aggregate: Wine and the split Windows jobs are required; observational
+    // remains out because it is an evidence-only lane.
     expect(aggregate.needs).toContain('windows')
     expect(aggregate.needs).toContain('windows-build')
-    expect(aggregate.needs).not.toContain('windows-coverage')
+    expect(aggregate.needs).toContain('windows-coverage')
     expect(aggregate.needs).toContain('windows-native-tests')
     expect(aggregate.needs).not.toContain('windows-observational')
     expect(aggregate.needs).not.toContain('serial-windows')
 
-    // Linux failover is a separate switch: the three required Linux workers
-    // and the verdict job resolve their pool through DSH_CI_FAILOVER_LINUX,
-    // never the Windows switch.
+    // All PR workers use hosted Ubuntu runners; no unavailable enterprise
+    // runner or failover variable is required to validate a pull request.
     for (const [jobName, job] of [['node-24', node24], ['node-24-coverage', node24Coverage], ['node-24-consumers', node24Consumers]] as const) {
-      expect(typeof job['runs-on']).toBe('string')
-      expect(job['runs-on'], `${jobName} runs-on must use the Linux failover switch`).toContain('DSH_CI_FAILOVER_LINUX')
-      expect(job['runs-on'], `${jobName} runs-on must not use the Windows failover switch`).not.toContain('DSH_CI_FAILOVER_WINDOWS')
-      expect(job['runs-on']).toContain('vm-backup')
+      expect(job['runs-on'], `${jobName} must use a hosted runner`).toBe('ubuntu-latest')
     }
-    expect(aggregate['runs-on']).toContain('DSH_CI_FAILOVER_LINUX')
-    expect(aggregate['runs-on']).not.toContain('DSH_CI_FAILOVER_WINDOWS')
-    expect(aggregate['runs-on']).toContain('vm-backup')
+    expect(aggregate['runs-on']).toBe('ubuntu-latest')
 
     // The run-gates aggregate lanes stop at the first blocking gate failure so
     // a red aggregate does not keep burning runner time on the remaining
@@ -258,8 +224,10 @@ describe('CI workflow', () => {
     // The observational lane stays complete: it is continue-on-error by design
     // and exists to collect as much Windows-native evidence per run as
     // possible, so the first failure must not truncate the rest.
-    expect(windowsObservational.env).toBeDefined()
-    expect(windowsObservational.env).not.toMatchObject({ DSH_GATE_FAIL_FAST: '1' })
+    const observationalFailFast = isRecord(windowsObservational.env)
+      ? windowsObservational.env.DSH_GATE_FAIL_FAST
+      : undefined
+    expect(observationalFailFast).not.toBe('1')
   })
 
   it('gives the Wine Host TypeScript compile the repository heap budget', () => {
@@ -385,29 +353,6 @@ describe('CI workflow', () => {
 
     expect(config).not.toContain("pool: process.platform === 'win32' ? 'threads' : 'forks'")
     expect(config.match(/pool: 'forks'/g)).toHaveLength(2)
-  })
-})
-
-describe('DeepSeek e2e workflow', () => {
-  it('prepares bubblewrap from the pinned payload without a package transaction', () => {
-    const workflow = loadWorkflow('.github/workflows/e2e.yml')
-    const e2e = workflowJob(workflow, 'e2e')
-    if (!Array.isArray(e2e.steps)) throw new TypeError('DeepSeek e2e workflow must define steps')
-
-    const steps = e2e.steps.filter(isRecord)
-    expect(steps.find(step => step.name === 'Prepare bubblewrap (unrestrict userns)')).toMatchObject({
-      run: 'bash scripts/prepare-ci-bubblewrap.sh',
-    })
-    expect(JSON.stringify(steps)).not.toContain('apt-get')
-  })
-
-  it('bounds profile subprocess fan-out to the tested e2e default', () => {
-    const workflow = loadWorkflow('.github/workflows/e2e.yml')
-    const e2e = workflowJob(workflow, 'e2e')
-    if (!Array.isArray(e2e.steps)) throw new TypeError('DeepSeek e2e workflow must define steps')
-
-    const step = e2e.steps.filter(isRecord).find(candidate => candidate.name === 'E2E tests (real DeepSeek API)')
-    expect(step).toMatchObject({ env: { DSH_E2E_MAX_WORKERS: 4 } })
   })
 })
 
@@ -672,12 +617,13 @@ describe('Issue lifecycle workflow', () => {
     expect(lifecyclePullRequest.types).not.toContain('ready_for_review')
     expect(lifecyclePullRequest.types).toContain('review_requested')
     expect(lifecycleReview.types).toEqual(['submitted'])
-    const gated = "${{ github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested' }}"
+    const gated = "${{ steps.config.outputs.enabled == 'true' && steps.credentials.outputs.available == 'true' && (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested') }}"
+    const handleGated = `${gated.slice(0, -3)} && steps.app-token.outputs.token != '' }}`
     const steps = lifecycleJob.steps.filter(isRecord)
     const tokenStep = steps.find(s => s.name === 'Create project token')
     const handleStep = steps.find(s => s.name === 'Handle repository event')
     expect(tokenStep).toMatchObject({ if: gated })
-    expect(handleStep).toMatchObject({ if: gated })
+    expect(handleStep).toMatchObject({ if: handleGated })
 
     // issue-policy owns PR validation; it is read-only and a real gate.
     const policyPullRequest = workflowEvent(policy, 'pull_request')

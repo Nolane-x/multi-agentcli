@@ -174,6 +174,13 @@ describe('web e2e: long Chat interaction contract', () => {
 
   it.skipIf(MODE === 'record')('keeps heterogeneous rows and their actions bound to exact semantic identities', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-chat-long-interactions'))
+    // The page can paint the resumed transcript one turn before the in-process
+    // Agent registry publishes its live handle. Wait for that readiness barrier
+    // before reading the source used to validate the semantic identities.
+    await expect.poll(
+      () => scaffold.ctx.agents.get(SessionId(SESSION_ID)) !== undefined,
+      { timeout: 30_000 },
+    ).toBe(true)
     const source = scaffold.ctx.agents.get(SessionId(SESSION_ID))
     if (source === undefined) throw new Error('seeded long-history agent is not attached')
 
@@ -217,10 +224,18 @@ describe('web e2e: long Chat interaction contract', () => {
     const loadEarlier = page.getByRole('button', { name: 'Load earlier', exact: true })
     const loadedMarks = turnNavigation.getByRole('button', { name: /^Jump to turn / })
     const loadedBefore = await loadedMarks.count()
-    await loadEarlier.click()
+    // The button is above the current tail. A Playwright click would first
+    // scroll the conversation to reveal it, racing the paging request with a
+    // reader scroll sample. Dispatch the already-visible DOM action directly
+    // after confirming the pager is idle.
+    await expect.poll(() => loadEarlier.isDisabled(), { timeout: 15_000 }).toBe(false)
+    await loadEarlier.evaluate((button: HTMLButtonElement) => { button.click() })
     // Paging converts marks to their loaded form without moving the
     // fixed-pitch ladder.
-    await expect.poll(() => loadedMarks.count(), { timeout: 15_000 }).toBeGreaterThan(loadedBefore)
+    // The first history page crosses the scaffold's remote boundary. Keep
+    // this I/O wait aligned with the long-scroll contract so a busy CI runner
+    // cannot report a false failure while the page is still in flight.
+    await expect.poll(() => loadedMarks.count(), { timeout: 30_000 }).toBeGreaterThan(loadedBefore)
     expect(await firstTurnButton.evaluate(button => (
       button.parentElement?.style.getPropertyValue('--turn-natural-position') ?? ''
     ))).toBe(firstTurnPosition)
@@ -322,9 +337,10 @@ describe('web e2e: long Chat interaction contract', () => {
       .toBe(`${FIXTURE.title} (1)`)
     await page.getByText(branchAssistantMarker, { exact: false }).last().waitFor({ timeout: 15_000 })
     const settled = scaffold.whenTurnSettled(60_000)
-    const composer = page.locator('[data-composer-input][contenteditable="true"]').last()
+    const childPane = page.locator(`[data-agent-id="${child.session.id}"]`)
+    const composer = childPane.locator('[data-composer-input][contenteditable="true"]')
     await composer.fill(CONTINUE_PROMPT)
-    await page.getByRole('button', { name: 'Send message', exact: true }).click()
+    await childPane.getByRole('button', { name: 'Send message', exact: true }).click()
     await expect.poll(() => page.getByText(CONTINUE_PROMPT, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
     expect(await settled).toBe(child.session.id)
     await page.getByText(CONTINUE_DONE, { exact: false }).last().waitFor({ timeout: 15_000 })

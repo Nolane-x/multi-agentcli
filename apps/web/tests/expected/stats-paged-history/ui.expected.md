@@ -457,8 +457,6 @@
   - img
   - text: Ran for {{duration}}
 - text: 7/25 {{clock}}
-- button "Back to bottom":
-  - img
 - textbox "Message or run a task... / commands, @ files or sessions"
 - button "Commands":
   - img

@@ -320,7 +320,9 @@ export abstract class ReleaseFamily {
 /** Release packages and apps: one shared version across the whole family. */
 class DshFamily extends ReleaseFamily {
   readonly id = 'dsh'
-  readonly patterns = ['packages/!(experimental)/*/package.json', 'apps/*/package.json'] as const
+  // The Tauri shell publishes native installers through desktop-release.yml,
+  // so it must not enter the npm package sequence.
+  readonly patterns = ['packages/!(experimental)/*/package.json', 'apps/!(desktop)/package.json'] as const
   readonly tagPrefix = 'dsh-v'
 
   /** Require current artifacts from a complete official client build. */

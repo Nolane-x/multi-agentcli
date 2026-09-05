@@ -197,7 +197,7 @@ export class TestSessions implements ISessions {
 
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
-    method: 'create' | 'open' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
+    method: 'create' | 'open' | 'stage' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
       | 'clear' | 'refresh' | 'search' | 'fork'
     args: unknown[]
   }[] = []
@@ -441,6 +441,17 @@ export class TestSessions implements ISessions {
       draft.current = id
       draft.currentAddress = undefined
     })
+  }
+
+  /**
+   * Record non-selecting resident staging. Test fixture event sources are
+   * already resident, so valid staging has no list mutation; stale ids are the
+   * same race-safe no-op as production.
+   * @param id - session id to stage without changing current selection.
+   */
+  stage(id: SessionId): void {
+    this.calls.push({ method: 'stage', args: [id] })
+    if (!this.records.has(id)) return
   }
 
   /** Open an existing fixture through its catalog address. */

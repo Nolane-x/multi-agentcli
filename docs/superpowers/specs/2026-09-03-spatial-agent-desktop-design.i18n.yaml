@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/superpowers/specs/2026-09-03-spatial-agent-desktop-design.md
+2026-09-03-spatial-agent-desktop-design.md: 0ac94572d85a7fd9bb6aa3d3c16c06988ef0f98f
+2026-09-03-spatial-agent-desktop-design.zh.md: 1d528ca77a3c4518d725a711d7e384a9c0d8fd3e

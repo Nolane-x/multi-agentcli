@@ -25,6 +25,7 @@ import {
 import { buildModelCatalog } from './catalog.ts'
 import { installModelSelectionProjection } from './model-selection-projection.ts'
 import { SessionSkillCatalog } from './skill-catalog.ts'
+import { TerminalControlController } from './terminal-control.ts'
 import type {
   ModelCatalog,
   SessionAttachmentRequest,
@@ -52,19 +53,25 @@ import type {
   SessionSearchValue,
   SessionSelectModelRequest,
   SessionSelectModelValue,
+  SessionStopJobRequest,
+  SessionStopJobValue,
   SessionUpdateQueueRequest,
   SessionUpdateQueueValue,
 } from './types.ts'
 
 export type * from './types.ts'
+export type * from './terminal-types.ts'
 export { ApiSessionNotFound } from './agent.ts'
 export { SessionFileReferences } from './file-references.ts'
 export { SessionSkillCatalog } from './skill-catalog.ts'
+export { TerminalControlController } from './terminal-control.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Host Session business API and Remote namespace owner. */
     sessionController: SessionController
+    /** Dedicated owner-scoped PTY Remote namespace owner. */
+    terminalControlController: TerminalControlController
   }
 }
 
@@ -141,6 +148,7 @@ export class SessionController extends TypertRemoteService {
       ?? (() => config.nativeOpen ?? (internals.openPath !== undefined || canOpenNativePath()))
     ctx.plugin(SessionFileReferences)
     ctx.plugin(SessionSkillCatalog)
+    ctx.plugin(TerminalControlController)
 
     ctx.on('session/created', (session) => {
       ctx.emit('api-session/added', this.listState.summaryFor(session))
@@ -365,6 +373,27 @@ export class SessionController extends TypertRemoteService {
   @Remote('cancel')
   cancel(request: SessionCancelRequest): SessionCancelValue {
     return this.commands.cancel(request)
+  }
+
+  /**
+   * Request cancellation of one background job visible under a live Session.
+   * The JobRegistry enforces exact-owner access; the browser never receives a
+   * registry service handle.
+   * @param request - owner Session and registry-issued job identity.
+   * @returns registry cancellation admission state.
+   */
+  @Remote('stopJob')
+  stopJob(request: SessionStopJobRequest): SessionStopJobValue {
+    try {
+      return { result: this.controlState.stopJob(request.sessionId, request.jobId) }
+    } catch (error: unknown) {
+      throw new RemoteError(
+        'gateway/bad-request',
+        'background job is unavailable for this Session',
+        {},
+        { cause: error },
+      )
+    }
   }
 
   /**

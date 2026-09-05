@@ -117,7 +117,12 @@ describe('web e2e: whole-session stats survive history paging', () => {
 
     // 加载更早: prepending the older page must not move ANY strip figure —
     // counts, wall times, or token groups.
-    await page.getByRole('button', { name: 'Load earlier' }).click()
+    const loadEarlier = page.getByRole('button', { name: 'Load earlier', exact: true })
+    // The pager is above the current tail. A Playwright click would scroll the
+    // conversation to reveal it and make the golden depend on that synthetic
+    // scroll. Dispatch the already-rendered action directly instead.
+    await expect.poll(() => loadEarlier.isDisabled(), { timeout: 15_000 }).toBe(false)
+    await loadEarlier.evaluate((button: HTMLButtonElement) => { button.click() })
     await expect.poll(() => page.getByText('m1', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
     expect(await strip.textContent()).toBe(stripBeforePaging)
     // With the whole log loaded, the window mounts one turn-tail footer per

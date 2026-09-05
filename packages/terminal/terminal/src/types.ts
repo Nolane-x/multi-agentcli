@@ -154,6 +154,22 @@ export interface TerminalBackendSession {
   startSend(request: TerminalSendRequest): TerminalSendOperation
   /** Read one bounded page from retained scrollback. */
   read(request: TerminalReadRequest): TerminalReadResult
+  /**
+   * Subscribe to decoded PTY output before sanitization or rendering transforms.
+   * ANSI/control sequences are preserved for interactive terminal UI consumers.
+   * The returned disposer must be safe to call more than once.
+   */
+  subscribeOutput?(listener: (data: string) => void): () => void
+  /**
+   * Write exact terminal input bytes without line-oriented readiness semantics.
+   * Interactive UI consumers use this capability for keystrokes and control sequences.
+   */
+  write?(data: string): Promise<void>
+  /**
+   * Resize the live terminal without restarting it when the backend supports responsive geometry.
+   * Consumers that require TUI correctness must reject sessions without this capability.
+   */
+  resize?(rows: number, cols: number): Promise<void>
   /** Signal the verified foreground process group. */
   signal(signal: TerminalSignal): Promise<TerminalSignalResult>
   /** Observe top-level process status. */

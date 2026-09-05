@@ -204,7 +204,7 @@ export type SubprocessTerminalSignal = 'SIGINT' | 'SIGTERM' | 'SIGKILL' | 'SIGTS
 export interface SubprocessTerminalSpawnSpec {
   /** Executable and arguments; `argv[0]` is the program. */
   argv: readonly string[]
-  /** Working directory in this subprocess provider's execution world. */
+  /** Working directory for the child. */
   cwd: string
   /** Explicit environment layered after the provider's ambient scrub. */
   env?: Record<string, string> | undefined
@@ -245,6 +245,13 @@ export interface SubprocessTerminalHandle {
    */
   write(data: string): Promise<void>
   /**
+   * Resize the allocated terminal without restarting its process session when the provider supports it.
+   * Consumers that require responsive TUI rendering must reject handles without this capability instead of silently ignoring resize.
+   * @param rows - terminal row count.
+   * @param cols - terminal column count.
+   */
+  resize?(rows: number, cols: number): Promise<void>
+  /**
    * Inspect the current foreground process group.
    * @returns its id and input-wait fact, or undefined when no foreground group can be resolved.
    */
@@ -257,7 +264,7 @@ export interface SubprocessTerminalHandle {
   signalForeground(signal: SubprocessTerminalSignal): Promise<number>
   /**
    * Idempotently terminate every terminal-session member the provider can still observe and await quiescence.
-   * After settlement, no write, inspection, or signal call remains in flight.
+   * After settlement, no write, supported resize, inspection, or signal call remains in flight.
    * Providers document substrate-specific observability limits.
    */
   terminate(): Promise<void>

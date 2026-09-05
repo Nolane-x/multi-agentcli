@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   benchmarkNpmResolution,
   buildRegistryIndex,
@@ -13,6 +13,12 @@ import {
 } from './benchmark-npm-resolution.ts'
 
 const roots: string[] = []
+
+// npm's own startup/cache work is much slower when this file runs inside the
+// four-way coverage partition, so the default 5s Vitest timeout is too tight
+// for these integration-shaped tests. The helper still enforces its 10s child
+// deadline; this only prevents Vitest from aborting the test before it does.
+vi.setConfig({ testTimeout: 60_000 })
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
@@ -89,6 +95,25 @@ describe('npm resolution benchmark', () => {
     })
   })
 
+  it('does not expose private workspace manifests as registry packages', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-npm-private-registry-'))
+    roots.push(root)
+    writeJson(root, 'apps/desktop/package.json', {
+      name: '@deepseek-ai/dsh-desktop',
+      version: '0.1.2-alpha.4',
+      private: true,
+    })
+    writeJson(root, 'apps/cli/package.json', {
+      name: '@deepseek-ai/dsh',
+      version: '0.1.2-alpha.5',
+    })
+
+    const index = buildRegistryIndex(root)
+
+    expect(index.has('@deepseek-ai/dsh-desktop')).toBe(false)
+    expect(index.get('@deepseek-ai/dsh')?.has('0.1.2-alpha.5')).toBe(true)
+  })
+
   it('runs npm against the local registry without requesting an archive', async () => {
     const index: RegistryIndex = new Map([[
       '@deepseek-ai/dsh',
@@ -100,7 +125,7 @@ describe('npm resolution benchmark', () => {
     expect(result.registryRequests).toBeGreaterThan(0)
     expect(result.archiveRequests).toBe(0)
     expect(result.unknownPackages).toEqual([])
-  })
+  }, 15_000)
 
   it('returns npm placement for two aliased package versions without requesting archives', async () => {
     const index: RegistryIndex = new Map([[

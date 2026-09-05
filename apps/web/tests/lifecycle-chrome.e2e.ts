@@ -329,7 +329,7 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
       const connectingGeometry = await connectionIndicatorGeometry(connecting)
       expect(await connectionIndicatorTextAlignment(connecting)).toBe('left')
       await connecting.hover()
-      expect(await connecting.innerText()).toBe('Reconnect now')
+      expect(await connecting.locator('[class*="hoverLabel"]').innerText()).toBe('Reconnect now')
       expect(await connectionIndicatorGeometry(connecting)).toEqual(connectingGeometry)
       await recoveryPage.mouse.move(0, 0)
 

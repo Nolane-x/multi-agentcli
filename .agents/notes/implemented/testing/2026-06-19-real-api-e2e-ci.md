@@ -2,6 +2,8 @@
 
 Status: implemented
 
+This is a historical record. The dedicated secret-bearing workflow described below was intentionally removed; real-API e2e suites remain opt-in and local, while the merge-gating CI stays keyless.
+
 English | [中文](2026-06-19-real-api-e2e-ci.zh.md)
 
 ## Problem
@@ -12,7 +14,7 @@ The default gate ([.github/workflows/ci.yml](../../../../.github/workflows/ci.ym
 
 ## Decision
 
-A dedicated workflow, [.github/workflows/e2e.yml](../../../../.github/workflows/e2e.yml), separate from ci.yml, runs only `pnpm run test:e2e` against the external API using a repo secret, on trusted events, with a preflight that converts a missing secret into a loud failure instead of a false green. The keyless workflow remains separate so forkable quality gates and secret-consuming real-API gates keep different trigger and credential policies.
+The former dedicated workflow (`.github/workflows/e2e.yml`), separate from ci.yml, ran only `pnpm run test:e2e` against the external API using a repo secret, on trusted events, with a preflight that converted a missing secret into a loud failure instead of a false green. It was retired so the keyless workflow remains the merge signal; real-API validation is now opt-in and local.
 
 ### A separate workflow, not a job in ci.yml
 

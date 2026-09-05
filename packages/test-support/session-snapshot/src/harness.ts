@@ -644,22 +644,30 @@ async function waitForPersistedInboxMessage(
   text: string,
   timeoutMs = DEFAULT_WAIT_TIMEOUT_MS,
 ): Promise<void> {
-  await vi.waitFor(async () => {
-    const log = (await harvestSessionLogs(root)).find(candidate => candidate.id === sessionId)
-    const matched = log?.content.split('\n').some((line) => {
-      if (line.length === 0) return false
-      const record = JSON.parse(line) as {
-        type?: unknown
-        data?: { inserted?: Array<{ content?: Array<{ type?: unknown; text?: unknown }> }> }
-      }
-      return record.type === 'agent/inbox/spliced' && record.data?.inserted?.some(message =>
-        message.content?.some(block => block.type === 'text'
-          && typeof block.text === 'string' && block.text.includes(text))) === true
-    }) ?? false
-    if (!matched) {
-      throw new Error(`snapshot-harness: session "${sessionId}" did not persist expected inbox message within ${timeoutMs}ms`)
-    }
-  }, { interval: WAIT_POLL_INTERVAL_MS, timeout: timeoutMs })
+  const timeoutError = (): Error => new Error(
+    `snapshot-harness: session "${sessionId}" did not persist expected inbox message within ${timeoutMs}ms`,
+  )
+  try {
+    await vi.waitFor(async () => {
+      const log = (await harvestSessionLogs(root)).find(candidate => candidate.id === sessionId)
+      const matched = log?.content.split('\n').some((line) => {
+        if (line.length === 0) return false
+        const record = JSON.parse(line) as {
+          type?: unknown
+          data?: { inserted?: Array<{ content?: Array<{ type?: unknown; text?: unknown }> }> }
+        }
+        return record.type === 'agent/inbox/spliced' && record.data?.inserted?.some(message =>
+          message.content?.some(block => block.type === 'text'
+            && typeof block.text === 'string' && block.text.includes(text))) === true
+      }) ?? false
+      if (!matched) throw timeoutError()
+    }, { interval: WAIT_POLL_INTERVAL_MS, timeout: timeoutMs })
+  } catch {
+    // Under a busy coverage partition, vi.waitFor can reach its deadline while
+    // the async filesystem probe is still pending and replace the callback's
+    // diagnostic with its generic timeout. Preserve this helper's contract.
+    throw timeoutError()
+  }
 }
 
 /** Whether a child log contains model work after its own descriptor event. */

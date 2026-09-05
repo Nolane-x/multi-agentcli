@@ -768,6 +768,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
             options.replayFixture,
             mode,
             `http://${browserHost}:${port}`,
+            workspaceCwd,
           )
         } catch (error) {
           failures.push(error)
@@ -820,14 +821,26 @@ function rawSessionLog(session: Session): string {
   ].join('\n')
 }
 
-function normalizeWebSessionVolatiles(log: string): string {
+function normalizeWebSessionVolatiles(log: string, workspaceCwds: readonly string[] = []): string {
   const normalizeValue = (value: unknown): unknown => {
     if (typeof value === 'string') {
-      return value.replace(/Anonymous user: [^.]+(?=\. Session sharing)/g, 'Anonymous user: {{anonymousUserId}}')
+      let normalized = value.replace(/Anonymous user: [^.]+(?=\. Session sharing)/g, 'Anonymous user: {{anonymousUserId}}')
+      for (const cwd of workspaceCwds) normalized = normalized.split(cwd).join('{{cwd}}')
+      // The runtime-context message is authored before the workspace session
+      // header is persisted, so cover the scaffold's generated child path even
+      // when that message used a different path spelling.
+      return normalized.replace(
+        /(?:[A-Za-z]:)?[\\/]+(?:[^\\/"\r\n]+[\\/]+)*dsh-web-e2e-ws-[^\\/"\r\n]+[\\/]+workspace/g,
+        '{{cwd}}',
+      )
     }
     if (Array.isArray(value)) return value.map(normalizeValue)
     if (value !== null && typeof value === 'object') {
-      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalizeValue(item)]))
+      // Browser replay goldens must remain platform-neutral.
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+        key,
+        key === 'clientTimeZone' && typeof item === 'string' ? 'UTC' : normalizeValue(item),
+      ]))
     }
     return value
   }
@@ -842,7 +855,7 @@ function normalizeWebSessionVolatiles(log: string): string {
 }
 
 function stableSessionFixture(session: Session, existing: string, workspaceCwd: string): string {
-  const fresh = scrubSessionSnapshot(normalizeWebSessionVolatiles(rawSessionLog(session)))
+  const fresh = scrubSessionSnapshot(normalizeWebSessionVolatiles(rawSessionLog(session), [workspaceCwd]))
     .split(session.id).join('{{sessionId}}')
     .split(workspaceCwd).join('{{cwd}}')
   const stable = redactSessionSnapshotIds(stabilizeFixtureMessageIds([fresh], [existing]))[0]
@@ -850,11 +863,61 @@ function stableSessionFixture(session: Session, existing: string, workspaceCwd: 
   return stable
 }
 
+const CORDIS_PLATFORM_SHELL_PROMPT = 'The active shell reports non-zero exits as `[exit code: N]` markers; '
+  + 'investigate failures before moving on.'
+const CORDIS_BASH_SHELL_PROMPT = 'Check the [exit code: N] marker on every bash result; '
+  + 'investigate failures before moving on.'
+const CORDIS_PWSH_SHELL_PROMPT = 'Non-zero exits are reported as `[exit code: N]` markers; '
+  + 'investigate failures before moving on. On Windows a killed process settles as '
+  + '`[exit code: 1]` without a signal marker; treat a bare exit 1 after an interruption '
+  + 'as a termination, not a command failure.'
+
+function isWebRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizeCordisPlatformShellSchemas(schemaSet: readonly unknown[]): unknown[] {
+  const shellIndex = schemaSet.findIndex(value =>
+    isWebRecord(value) && (value.name === 'bash' || value.name === 'pwsh'))
+  if (shellIndex < 0) return [...schemaSet]
+
+  const shell = schemaSet[shellIndex]
+  if (!isWebRecord(shell) || !isWebRecord(shell.parameters)) return [...schemaSet]
+  const properties = shell.parameters.properties
+  if (!isWebRecord(properties)
+    || !isWebRecord(properties.command)
+    || !isWebRecord(properties.description)) return [...schemaSet]
+
+  const normalizedShell: Record<string, unknown> = {
+    ...shell,
+    name: 'shell',
+    description: 'Execute a shell command and return its stdout/stderr.',
+    parameters: {
+      ...shell.parameters,
+      properties: {
+        ...properties,
+        command: { ...properties.command, description: 'The shell command to execute.' },
+        description: { ...properties.description, description: 'Clear, concise description of this shell command.' },
+      },
+    },
+  }
+  const withoutShell = schemaSet.filter((_value, index) => index !== shellIndex)
+  const anchorIndex = withoutShell.findIndex(value => isWebRecord(value) && value.name === 'ask_user_question')
+  const insertIndex = anchorIndex < 0 ? Math.min(shellIndex, withoutShell.length) : anchorIndex + 1
+  withoutShell.splice(insertIndex, 0, normalizedShell)
+  return withoutShell
+}
+
+function normalizeCordisPlatformSchemas(schemaSets: readonly unknown[][]): unknown[][] {
+  return schemaSets.map(normalizeCordisPlatformShellSchemas)
+}
+
 async function assertReplaySession(
   sessions: readonly Session[],
   fixturePath: string,
   mode: WebSnapshotMode,
   webUrl: string,
+  workspaceCwd: string,
 ): Promise<void> {
   let expected = await readFile(fixturePath, 'utf8')
   const userPrompts = fixtureUserPrompts(expected)
@@ -880,12 +943,16 @@ async function assertReplaySession(
     id?: unknown
     cwd?: unknown
   }
-  const actualContext: NormalizeContext = { sessionIds: [String(session.id)], cwd: sessionCwd }
+  const actualContext: NormalizeContext = {
+    sessionIds: [String(session.id)],
+    cwd: sessionCwd,
+    cwdAliases: [workspaceCwd],
+  }
   const expectedContext: NormalizeContext = {
     sessionIds: typeof expectedHeader.id === 'string' ? [expectedHeader.id] : [],
     cwd: typeof expectedHeader.cwd === 'string' ? expectedHeader.cwd : '\0no-cwd\0',
   }
-  expect(normalizeSessionSnapshots([normalizeWebSessionVolatiles(actual)], actualContext)[0], `${fixturePath}: persisted replay`)
+  expect(normalizeSessionSnapshots([normalizeWebSessionVolatiles(actual, [sessionCwd, workspaceCwd])], actualContext)[0], `${fixturePath}: persisted replay`)
     .toBe(normalizeSessionSnapshots([normalizeWebSessionVolatiles(expected)], expectedContext)[0])
 
   const fixtureDir = dirname(fixturePath)
@@ -895,12 +962,19 @@ async function assertReplaySession(
   const normalizePrompt = (value: string): string => value
     .split(REPO_ROOT).join('{{sourceRoot}}')
     .split(webUrl).join('{{webUrl}}')
-  const prompts = normalizedSystemPrompts(actual, actualContext).map(normalizePrompt)
+  const cordisPlatformContract = manifest.composition === 'web-cordis'
+  const prompts = normalizedSystemPrompts(actual, actualContext)
+    .map(normalizePrompt)
+    .map(value => cordisPlatformContract
+      ? value.replaceAll(CORDIS_BASH_SHELL_PROMPT, CORDIS_PLATFORM_SHELL_PROMPT)
+        .replaceAll(CORDIS_PWSH_SHELL_PROMPT, CORDIS_PLATFORM_SHELL_PROMPT)
+      : value)
   const schemas = normalizedToolSchemas(actual, actualContext)
+  const stableSchemas = cordisPlatformContract ? normalizeCordisPlatformSchemas(schemas) : schemas
   const promptPath = join(fixtureDir, 'system-prompt.expected.md')
   const schemaPath = join(fixtureDir, 'tool-schemas.expected.json')
   const promptSnapshot = formatSystemPromptSnapshot(prompts[0] as string, prompts.slice(1))
-  const schemaSnapshot = formatToolSchemasSnapshot(schemas[0] as unknown[], schemas.slice(1))
+  const schemaSnapshot = formatToolSchemasSnapshot(stableSchemas[0] as unknown[], stableSchemas.slice(1))
   if (mode === 'refresh') {
     await Promise.all([writeFile(promptPath, promptSnapshot), writeFile(schemaPath, schemaSnapshot)])
   }
@@ -978,13 +1052,17 @@ export function fixtureIdentity(
  * @returns the realized fixture text.
  */
 export function realizeSeedFixture(scaffold: WebScaffold, fixtureText: string, id: string): string {
+  // `fixtureText` is JSONL. A Windows cwd must be inserted as a JSON-escaped
+  // string fragment; inserting the native path literally turns `\U`/`\t`
+  // sequences into invalid JSON before the seed can be parsed.
+  const escapedCwd = JSON.stringify(scaffold.workspaceCwd).slice(1, -1)
   const realized = fixtureText
     .split('{{sessionId}}').join(id)
     .split('{{session:1}}').join(id)
     .replace(/\{\{session:([2-9]\d*)\}\}/g, (_token, ordinal: string) => `${id}-child-${ordinal}`)
     .replace(/\{\{(message|approval|workflow|command|rpc|retry|id):([1-9]\d*)\}\}/g, (_token, kind: string, ordinal: string) =>
       fixtureIdentity(kind as 'message' | 'approval' | 'workflow' | 'command' | 'rpc' | 'retry' | 'id', Number(ordinal)))
-    .split('{{cwd}}').join(scaffold.workspaceCwd)
+    .split('{{cwd}}').join(escapedCwd)
   const fixtureCwd = (JSON.parse(realized.split('\n', 1)[0]!) as { cwd?: string }).cwd
   return fixtureCwd === undefined
     ? realized
@@ -1166,7 +1244,11 @@ export async function captureStableAria(
   workspaceCwd: string,
   options: { normalizeAge?: boolean } = {},
 ): Promise<string> {
-  const region = page.locator(selector).first()
+  let region = page.locator(selector).first()
+  if (selector.includes('centerCol')) {
+    const currentBody = page.locator('[data-agent-current] [class*="agentBody"]').first()
+    if (await currentBody.count() > 0) region = currentBody
+  }
   const age = options.normalizeAge === true
   let previous = normalizeAria(await region.ariaSnapshot(), workspaceCwd, age)
   await expect.poll(async () => {
@@ -1193,20 +1275,40 @@ export async function captureExpandedTurnProcessAria(
   workspaceCwd: string,
   options: { scrollToBottom?: boolean } = {},
 ): Promise<string> {
-  const controls = page.locator('[data-turn-process]')
+  let region = page.locator(selector).first()
+  if (selector.includes('centerCol')) {
+    const currentBody = page.locator('[data-agent-current] [class*="agentBody"]').first()
+    if (await currentBody.count() > 0) region = currentBody
+  }
+  const controls = region.locator('[data-turn-process]')
   const count = await controls.count()
   expect(count).toBeGreaterThan(0)
-  const opened: number[] = []
-  for (let index = 0; index < count; index++) {
-    const control = controls.nth(index)
-    if (!await control.isVisible() || await control.getAttribute('aria-expanded') === 'true') continue
-    await control.click()
-    opened.push(index)
+  const opened = new Set<number>()
+  // A process disclosure can be replaced by the keyed Chat seat while the
+  // preceding disclosure is opening. Re-scan the live locator until every
+  // currently eligible control reports the requested state.
+  for (let pass = 0; pass < 3; pass += 1) {
+    let closed = false
+    for (let index = 0; index < count; index++) {
+      const control = controls.nth(index)
+      if (!await control.isVisible() || await control.getAttribute('aria-expanded') === 'true') continue
+      closed = true
+      // The Chat seat can replace the button while a preceding disclosure is
+      // settling. Dispatch against the live DOM node so Playwright does not
+      // scroll or retain a coordinate for the replaced control.
+      await control.evaluate((element) => { (element as HTMLButtonElement).click() })
+      await expect.poll(() => control.getAttribute('aria-expanded'), { timeout: 5_000 }).toBe('true')
+      opened.add(index)
+    }
+    if (!closed) break
   }
+  await expect.poll(async () => (await controls.evaluateAll(nodes => nodes
+    .filter(node => (node as HTMLElement).offsetParent !== null)
+    .every(node => node.getAttribute('aria-expanded') === 'true'))), { timeout: 5_000 }).toBe(true)
   try {
     if (options.scrollToBottom === true) {
-      const backToBottom = page.getByRole('button', { name: 'Back to bottom', exact: true })
-      const scroll = page.locator('[data-conversation-scroll]')
+      const backToBottom = region.getByRole('button', { name: 'Back to bottom', exact: true })
+      const scroll = region.locator('[data-conversation-scroll]')
       await expect.poll(async () => {
         const distanceFromBottom = await scroll.evaluate((host) => {
           host.scrollTop = host.scrollHeight
@@ -1217,9 +1319,11 @@ export async function captureExpandedTurnProcessAria(
     }
     return await captureStableAria(page, selector, workspaceCwd)
   } finally {
-    for (const index of opened.reverse()) {
+    for (const index of [...opened].reverse()) {
       const control = controls.nth(index)
-      if (await control.getAttribute('aria-expanded') === 'true') await control.click()
+      if (await control.getAttribute('aria-expanded') === 'true') {
+        await control.evaluate((element) => { (element as HTMLButtonElement).click() })
+      }
     }
   }
 }

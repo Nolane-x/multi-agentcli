@@ -1,0 +1,21 @@
+[package]
+name = "dsh-spatial-desktop"
+version = "0.1.2"
+description = "A lightweight desktop shell for the spatial DeepSeek Harness workspace"
+authors = ["DeepSeek Harness contributors"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "dsh_spatial_desktop_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+default = ["custom-protocol"]

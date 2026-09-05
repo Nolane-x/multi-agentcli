@@ -2343,6 +2343,28 @@ describe('ChatView', () => {
     expect(view.getByLabelText('回到底部')).toBeTruthy()
   })
 
+  it('lets a new submission reclaim the tail while an old scroll sample is pending', () => {
+    const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
+    const metrics = installScrollMetrics(scroller, 1_000, 300)
+    scroller.scrollTop = 700
+    fireEvent.scroll(scroller)
+    fireEvent(scroller, new Event('scrollend'))
+
+    // The reader is away from the tail, then a delayed delivery arrives
+    // without changing geometry. A new submission must still become visible.
+    readerScroll(scroller, 100)
+    fireEvent.scroll(scroller)
+    metrics.setHeight(1_200)
+    act(() => {
+      h.setChat({ nodes: [user(1, 'q'), assistant(2, 'a'), user(3, 'new submission')] })
+    })
+
+    expect(scroller.scrollTop).toBe(900)
+    expect(view.queryByLabelText('回到底部')).toBeNull()
+  })
+
   it('one ResizeObserver owns pinned dynamic-height follow and ignores growth while away', () => {
     let notify: (() => void) | undefined
     const observe = vi.fn()
@@ -2368,6 +2390,130 @@ describe('ChatView', () => {
     expect(scroller.scrollTop).toBe(1_200)
     readerScroll(scroller, 200)
     Object.defineProperty(scroller, 'scrollHeight', { value: 1_400, writable: true })
+    act(() => { notify?.() })
+    expect(scroller.scrollTop).toBe(200)
+    expect(observe).toHaveBeenCalledTimes(1)
+  })
+
+  it('observes an enclosing conversation host whose viewport can reflow independently', () => {
+    let notify: (() => void) | undefined
+    const observed: Element[] = []
+    class ResizeObserverStub {
+      constructor(callback: ResizeObserverCallback) {
+        notify = () => { callback([], this as unknown as ResizeObserver) }
+      }
+
+      observe = (element: Element): void => { observed.push(element) }
+      disconnect = vi.fn()
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    const host = document.createElement('div')
+    host.setAttribute('data-conversation-scroll', '')
+    document.body.appendChild(host)
+    try {
+      const metrics = installScrollMetrics(host, 1_000, 300)
+      const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
+      render(<h.ChatView {...h.props} />, { container: host })
+      expect(host.scrollTop).toBe(700)
+      metrics.setHeight(1_200)
+      act(() => { notify?.() })
+      expect(host.scrollTop).toBe(900)
+      expect(observed).toContain(host)
+    } finally {
+      host.remove()
+    }
+  })
+
+  it('rechecks pinned follow after a layout observer runs before final flow geometry', () => {
+    let notify: (() => void) | undefined
+    let nextFrame = 0
+    const frames = new Map<number, FrameRequestCallback>()
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      nextFrame += 1
+      frames.set(nextFrame, callback)
+      return nextFrame
+    })
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => { frames.delete(id) })
+    class ResizeObserverStub {
+      constructor(callback: ResizeObserverCallback) {
+        notify = () => { callback([], this as unknown as ResizeObserver) }
+      }
+
+      observe = vi.fn()
+      disconnect = vi.fn()
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+    const host = document.createElement('div')
+    host.setAttribute('data-conversation-scroll', '')
+    document.body.appendChild(host)
+    try {
+      const metrics = installScrollMetrics(host, 1_000, 300)
+      const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
+      render(<h.ChatView {...h.props} />, { container: host })
+      expect(host.scrollTop).toBe(700)
+
+      // The observer can run while the old flow height is still exposed to
+      // layout. The next frame is the first point at which the final height
+      // is observable.
+      act(() => { notify?.() })
+      metrics.setHeight(1_200)
+      act(() => {
+        const pending = [...frames.values()]
+        frames.clear()
+        for (const callback of pending) callback(0)
+      })
+      expect(host.scrollTop).toBe(900)
+    } finally {
+      host.remove()
+    }
+  })
+
+  it('rechecks pinned follow after a late stream render without observer growth', () => {
+    const host = document.createElement('div')
+    host.setAttribute('data-conversation-scroll', '')
+    document.body.appendChild(host)
+    try {
+      const metrics = installScrollMetrics(host, 1_000, 300)
+      const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
+      render(<h.ChatView {...h.props} />, { container: host })
+      expect(host.scrollTop).toBe(700)
+
+      // The stream can commit a text update after the host's measured boxes
+      // have already settled; no ResizeObserver callback is required for this
+      // render-only path.
+      metrics.setHeight(1_200)
+      act(() => { h.setChat({ nodes: [user(1, 'q'), assistant(2, 'a later')] }) })
+      expect(host.scrollTop).toBe(900)
+    } finally {
+      host.remove()
+    }
+  })
+
+  it('follows pinned stream mutations when the flow box keeps its flex size', () => {
+    let notify: (() => void) | undefined
+    const observe = vi.fn()
+    class MutationObserverStub {
+      constructor(callback: MutationCallback) {
+        notify = () => { callback([], this as unknown as MutationObserver) }
+      }
+
+      observe = observe
+      disconnect = vi.fn()
+    }
+    vi.stubGlobal('MutationObserver', MutationObserverStub)
+    const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
+    const metrics = installScrollMetrics(scroller, 1_000, 300)
+    scroller.scrollTop = 700
+    fireEvent.scroll(scroller)
+    fireEvent(scroller, new Event('scrollend'))
+
+    metrics.setHeight(1_200)
+    act(() => { notify?.() })
+    expect(scroller.scrollTop).toBe(900)
+    readerScroll(scroller, 200)
+    metrics.setHeight(1_400)
     act(() => { notify?.() })
     expect(scroller.scrollTop).toBe(200)
     expect(observe).toHaveBeenCalledTimes(1)

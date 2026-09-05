@@ -14,6 +14,7 @@ import type { SessionSearchResultItem } from '../sessions/manager.ts'
 import type { SessionBinding, SessionListState } from '../sessions/service.ts'
 import type { SessionFace } from './session.ts'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type { TerminalSessionClient } from '../terminal-session.ts'
 
 export type { AgentContext } from '../scope.ts'
 
@@ -27,6 +28,8 @@ export interface ISessions {
    * (fixture included) reports the same number.
    */
   readonly searchResultLimit: number
+  /** Explicit Session-addressed PTY operations for terminal surfaces. */
+  readonly terminal?: TerminalSessionClient
   /**
    * Create or adopt a Session on the Host.
    * @param opts - target workspace, directory, and optional preallocated identity.
@@ -42,6 +45,14 @@ export interface ISessions {
    * @param id - session id (must exist in the list; unknown ids fail loud).
    */
   open(id: SessionId): void
+  /**
+   * Open one already-addressable Session's resident history/follow source
+   * without changing the current selection. This is the multi-pane staging
+   * seam: repeated calls are idempotent at the Session layer, and a stale id
+   * that is no longer addressable is ignored.
+   * @param id - listed or retained session identity.
+   */
+  stage(id: SessionId): void
   /**
    * Open a healthy catalog child through its exact direct-parent address.
    * @param address - catalog-derived parent and child ids.

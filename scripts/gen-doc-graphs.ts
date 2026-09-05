@@ -484,6 +484,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'The registry owns exact-Agent session identity and cleanup; backends own terminal mechanics, while tool-terminal exposes the owner-scoped model tools.',
   },
   {
+    key: 'terminalControlController',
+    pkg: 'session-controller',
+    title: 'Owner-scoped terminal Remote controller',
+    mode: 'core',
+    consumers: ['client-ui-layout'],
+    note: 'Exposes the exact-Agent PTY control plane over the generated terminal Remote namespace without bypassing Session ownership or the resident terminal registry.',
+  },
+  {
     key: 'sandbox',
     pkg: 'sandbox',
     title: 'Process-sandbox seam',

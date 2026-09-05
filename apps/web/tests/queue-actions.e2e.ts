@@ -92,6 +92,7 @@ describe('web e2e: queue row actions', () => {
     await input.fill(ACTIVE_PROMPT)
     await input.press('Enter')
     await expect.poll(() => existsSync(readyFile), { timeout: 15_000 }).toBe(true)
+    await page.getByText('partial', { exact: true }).waitFor({ timeout: 10_000 })
 
     for (const text of [REMOVE, EDIT]) {
       // A just-submitted composer is read-only for the prompt round-trip.
@@ -167,6 +168,16 @@ describe('web e2e: queue row actions', () => {
     await expect.poll(() => page.getByRole('button', { name: 'Remove queued message' }).count())
       .toBe(2)
 
+    // The stop click leaves the pointer over the composer controls after the
+    // busy button disappears. Move it away so the transient Send tooltip
+    // cannot leak into the durable accessibility golden.
+    await page.mouse.move(0, 0)
+    await page.evaluate(() => {
+      const active = document.activeElement
+      if (active instanceof HTMLElement) active.blur()
+    })
+    await expect.poll(() => page.getByRole('tooltip', { name: 'Send message', exact: true }).count())
+      .toBe(0)
     const preservedSnapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(PRESERVED_EXPECTED, preservedSnapshot, MODE)
     const expanded = await captureExpandedTurnProcessAria(
@@ -211,6 +222,7 @@ describe('web e2e: queue row actions', () => {
     await input.fill('/goal Keep the composer context panels aligned')
     await input.press('Enter')
     await expect.poll(() => existsSync(readyFile), { timeout: 15_000 }).toBe(true)
+    await page.getByText('partial', { exact: true }).waitFor({ timeout: 10_000 })
     await page.locator('[data-goal-bar]').waitFor({ timeout: 10_000 })
 
     const sessions = scaffold.ctx.sessions.list()

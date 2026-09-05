@@ -17,7 +17,9 @@
     "src/history.ts",
     "src/list.ts",
     "src/model-selection-projection.ts",
-    "src/skill-catalog.ts"
+    "src/skill-catalog.ts",
+    "src/terminal-control.ts",
+    "src/terminal-types.ts"
   ],
   "references": [
     { "path": "../../../vendor/cordis" },

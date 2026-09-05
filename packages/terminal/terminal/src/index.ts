@@ -58,9 +58,12 @@ export type TerminalErrorCode =
   | 'FOREIGN_SESSION'
   | 'NO_BACKEND'
   | 'NO_SESSION'
+  | 'OUTPUT_UNSUPPORTED'
   | 'OWNER_NOT_LIVE'
+  | 'RESIZE_UNSUPPORTED'
   | 'SEND_ACTIVE'
   | 'SERVICE_DISPOSING'
+  | 'WRITE_UNSUPPORTED'
 
 /** Error carrying a stable {@link TerminalErrorCode}. */
 export class TerminalError extends Error {
@@ -262,6 +265,58 @@ export class TerminalSessionService extends Service {
    */
   read(owner: Agent, id: TerminalSessionId, request: TerminalReadRequest = {}): TerminalReadResult {
     return this.expectOwned(owner, id).session.read(request)
+  }
+
+  /**
+   * Subscribe to exact decoded PTY output before sanitizer/render transforms.
+   * @param owner - exact session owner.
+   * @param id - target PTY identity.
+   * @param listener - synchronous consumer of ANSI/control-preserving output chunks.
+   * @returns idempotent subscription disposer.
+   */
+  subscribeOutput(owner: Agent, id: TerminalSessionId, listener: (data: string) => void): () => void {
+    const record = this.expectOwned(owner, id)
+    if (record.closing !== undefined) throw new Error(`PTY session ${id} is closing`)
+    if (record.session.subscribeOutput === undefined) {
+      throw new TerminalError(`PTY backend "${record.type}" does not support raw output`, 'OUTPUT_UNSUPPORTED')
+    }
+    return record.session.subscribeOutput.call(record.session, listener)
+  }
+
+  /**
+   * Write exact terminal input for an owned session without line-oriented readiness semantics.
+   * @param owner - exact session owner.
+   * @param id - target PTY identity.
+   * @param data - exact UTF-8/control-sequence data to write.
+   */
+  async write(owner: Agent, id: TerminalSessionId, data: string): Promise<void> {
+    const record = this.expectOwned(owner, id)
+    if (record.closing !== undefined) throw new Error(`PTY session ${id} is closing`)
+    if (record.active !== undefined) {
+      throw new TerminalError(`PTY session ${id} has an active model send`, 'SEND_ACTIVE')
+    }
+    if (record.session.write === undefined) {
+      throw new TerminalError(`PTY backend "${record.type}" does not support raw input`, 'WRITE_UNSUPPORTED')
+    }
+    await record.session.write.call(record.session, data)
+  }
+
+  /**
+   * Resize one owned live terminal without restarting its process session.
+   * @param owner - exact session owner.
+   * @param id - target PTY identity.
+   * @param rows - positive safe-integer terminal row count.
+   * @param cols - positive safe-integer terminal column count.
+   */
+  async resize(owner: Agent, id: TerminalSessionId, rows: number, cols: number): Promise<void> {
+    const record = this.expectOwned(owner, id)
+    if (!Number.isSafeInteger(rows) || rows <= 0) throw new Error('PTY resize rows must be a positive safe integer')
+    if (!Number.isSafeInteger(cols) || cols <= 0) throw new Error('PTY resize cols must be a positive safe integer')
+    if (record.closing !== undefined) throw new Error(`PTY session ${id} is closing`)
+    if (record.session.resize === undefined) {
+      throw new TerminalError(`PTY backend "${record.type}" does not support live resize`, 'RESIZE_UNSUPPORTED')
+    }
+    await record.session.resize.call(record.session, rows, cols)
   }
 
   /**

@@ -28,7 +28,11 @@ const TOOL_SESSION_ID = 'chat-scroll-tool-e2e'
 const RESTORE_SESSION_A_ID = 'chat-scroll-restore-a-e2e'
 const RESTORE_SESSION_B_ID = 'chat-scroll-restore-b-e2e'
 const REPLAY_CONTEXT_WINDOW = 10_000_000
-const STREAM_PACE_MS = 24
+// Keep the live stream in flight while the scenario performs its reader
+// gestures. The first text marker arrives immediately; this pace prevents the
+// remaining synthetic chunks from completing before the concurrent-scroll
+// assertions take their anchor.
+const STREAM_PACE_MS = 100
 const GEOMETRY_TOLERANCE = 2
 const RESPONSIVE_REFLOW_TOLERANCE = 32
 const LIVE_TEXT_PROMPT = 'CHAT_SCROLL_LIVE_USER Continue this long conversation while I inspect older history.'
@@ -410,7 +414,9 @@ async function expectSameFlowTop(
 
 async function expectBottom(page: Page): Promise<void> {
   await expect.poll(async () => Math.abs((await scrollGeometry(page)).distanceFromBottom), {
-    timeout: 10_000,
+    // Browser layout can settle behind the scaffold's stream commit on a
+    // constrained runner; keep polling long enough to observe the final floor.
+    timeout: 30_000,
   }).toBeLessThanOrEqual(1)
 }
 
@@ -650,7 +656,7 @@ describe('web e2e: long Chat scroll contract', () => {
         const composer = world.page.locator('[data-composer-input][contenteditable="true"]').last()
         await composer.fill(LIVE_TOOL_PROMPT)
         await world.page.getByRole('button', { name: 'Send message', exact: true }).click()
-        await expect.poll(() => fileExists(readyPath), { timeout: 15_000 }).toBe(true)
+        await expect.poll(() => fileExists(readyPath), { timeout: 30_000 }).toBe(true)
         const liveRow = world.page.locator(`[data-chat-call-id="${LIVE_TOOL_CALL_ID}"] [data-sample="bash"]`)
         await liveRow.waitFor({ timeout: 15_000 })
         expect(await liveRow.getAttribute('data-state')).toBe('running')
@@ -883,7 +889,13 @@ describe('web e2e: long Chat scroll contract', () => {
         const composer = world.page.locator('[data-composer-input][contenteditable="true"]').last()
         await composer.fill(LIVE_FLING_PROMPT)
         await world.page.getByRole('button', { name: 'Send message', exact: true }).click()
-        await expect.poll(() => fileExists(readyPath), { timeout: 15_000 }).toBe(true)
+        await expect.poll(() => fileExists(readyPath), { timeout: 30_000 }).toBe(true)
+        // The tool's readiness file is produced before its live row necessarily
+        // commits. Wait for the same DOM barrier as the long-tool scenario so
+        // the first floor assertion observes the active stream layout.
+        const liveRow = world.page.locator(`[data-chat-call-id="${LIVE_TOOL_CALL_ID}"] [data-sample="bash"]`)
+        await liveRow.waitFor({ timeout: 30_000 })
+        expect(await liveRow.getAttribute('data-state')).toBe('running')
         await expectBottom(world.page)
 
         // Fling away while the turn is mid-flight: the scroll burst alone must

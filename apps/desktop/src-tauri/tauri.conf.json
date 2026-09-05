@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "DSH Spatial",
+  "version": "0.1.2",
+  "identifier": "ai.deepseek.dsh.spatial",
+  "build": {
+    "beforeDevCommand": "pnpm -w run desktop:preview",
+    "devUrl": "http://127.0.0.1:4173/preview.html",
+    "beforeBuildCommand": "pnpm -w run build:desktop",
+    "frontendDist": "../../../apps/web/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "DSH Spatial",
+        "url": "preview.html",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "DeveloperTool",
+    "shortDescription": "A lightweight spatial multi-agent Harness workspace",
+    "longDescription": "A desktop shell for the spatial DeepSeek Harness workspace with multi-agent panes, plugins, sessions, and worker-backed local execution",
+    "createUpdaterArtifacts": false
+  }
+}

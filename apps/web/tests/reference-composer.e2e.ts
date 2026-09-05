@@ -320,7 +320,10 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     // The same listing reached by drilling owes the user the way back.
     await writeComposerDraft(page, input, '@folderx')
     await menu.getByRole('option', { name: /^folderx\// }).waitFor()
+    await expect.poll(() => input.textContent()).toBe('@folderx')
+    await expect.poll(() => crumbs.count()).toBe(0)
     await page.keyboard.press('Tab')
+    await expect.poll(() => input.textContent()).toBe('@folderx/')
     await menu.getByRole('option', { name: /child\.txt/ }).waitFor()
     await crumbs.waitFor()
     await expect.poll(() => crumbs.getByRole('button').allTextContents())

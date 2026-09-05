@@ -169,6 +169,7 @@ export class LocalPtySession implements TerminalBackendSession {
   private readonly scrollback: BoundedTextBuffer
   private readonly outputEnded = Promise.withResolvers<void>()
   private readonly completion: Promise<void>
+  private readonly rawOutputListeners = new Set<(data: string) => void>()
   private statusValue: TerminalSessionStatus = { kind: 'running' }
   // TODO(pty-send-state-consolidation): Fold the per-send fields below
   // (active/activeTimer/activeDeadlineTimer/activeAbort/interrupting/
@@ -180,6 +181,8 @@ export class LocalPtySession implements TerminalBackendSession {
   private activeAbort: (() => void) | undefined
   private interrupting: LocalSendOperation | undefined
   private activeWrite: Promise<boolean> | undefined
+  private rawWriteTail = Promise.resolve()
+  private rawWritesPending = 0
   private pollingReady: LocalSendOperation | undefined
   private polling = false
   private promptSeen = false
@@ -187,6 +190,8 @@ export class LocalPtySession implements TerminalBackendSession {
   private promptTail = ''
   private shellPgid: number | undefined
   private initializing = false
+  private initializationOutputRevision = 0
+  private outputRevision = 0
   private lastOutputAt = Date.now()
   private closing = false
   private closePromise: Promise<void> | undefined
@@ -233,7 +238,7 @@ export class LocalPtySession implements TerminalBackendSession {
    * @returns Resolves after startup readiness; rejects on exit or readiness timeout.
    */
   async initialize(signal?: AbortSignal): Promise<void> {
-    this.initializing = true
+    this.beginInitialization()
     try {
       const operation = this.startSend({ text: '', submit: false, ...signal !== undefined ? { signal } : {} })
       const result = await operation.done
@@ -244,19 +249,32 @@ export class LocalPtySession implements TerminalBackendSession {
       signal?.throwIfAborted()
       throw error
     } finally {
-      this.initializing = false
+      this.endInitialization()
     }
+  }
+
+  /** Hold readiness probes until a dialect-specific startup sequence emits output. */
+  beginInitialization(): void {
+    this.initializing = true
+    this.initializationOutputRevision = this.outputRevision
+  }
+
+  /** Release the startup-only readiness fence after the initial prompt is accepted. */
+  endInitialization(): void {
+    this.initializing = false
   }
 
   startSend(request: TerminalSendRequest): TerminalSendOperation {
     if (this.closing) throw new Error('PTY session is closing')
     if (this.statusValue.kind === 'exited') throw new Error('PTY session has exited')
-    if (this.active !== undefined) {
+    if (this.active !== undefined || this.rawWritesPending > 0) {
       const draining = this.activeWrite !== undefined
         ? ' or draining provider write'
         : this.interrupting !== undefined
           ? ' or draining foreground interrupt'
-          : ''
+          : this.rawWritesPending > 0
+            ? ' or draining raw input'
+            : ''
       throw new TerminalError(`PTY session already has an active send${draining}`, 'SEND_ACTIVE')
     }
     if (request.signal?.aborted === true) throw new Error('PTY send aborted before write')
@@ -374,6 +392,51 @@ export class LocalPtySession implements TerminalBackendSession {
     }
   }
 
+  subscribeOutput(listener: (data: string) => void): () => void {
+    if (this.closing) throw new Error('PTY session is closing')
+    if (this.statusValue.kind === 'exited') throw new Error('PTY session has exited')
+    this.rawOutputListeners.add(listener)
+    let disposed = false
+    return () => {
+      if (disposed) return
+      disposed = true
+      this.rawOutputListeners.delete(listener)
+    }
+  }
+
+  async write(data: string): Promise<void> {
+    if (this.closing) throw new Error('PTY session is closing')
+    if (this.statusValue.kind === 'exited') throw new Error('PTY session has exited')
+    if (this.active !== undefined) throw new TerminalError('PTY session has an active model send', 'SEND_ACTIVE')
+    this.rawWritesPending += 1
+    const write = this.rawWriteTail.then(async () => {
+      if (this.closing) throw new Error('PTY session is closing')
+      if (this.statusValue.kind === 'exited') throw new Error('PTY session has exited')
+      if (this.protocolWorkPending()) await this.drainTerminalProtocol()
+      this.resetReadinessEvidence()
+      await this.terminal.write(data)
+    })
+    this.rawWriteTail = write.catch(() => {})
+    try {
+      await write
+    } finally {
+      this.rawWritesPending -= 1
+    }
+  }
+
+  async resize(rows: number, cols: number): Promise<void> {
+    if (this.closing) throw new Error('PTY session is closing')
+    if (this.statusValue.kind === 'exited') throw new Error('PTY session has exited')
+    if (this.terminal.resize === undefined) {
+      throw new TerminalError('subprocess terminal provider does not support live resize', 'RESIZE_UNSUPPORTED')
+    }
+    if (this.protocolWorkPending()) await this.drainTerminalProtocol()
+    await this.terminal.resize(rows, cols)
+    // The PTY can close while the asynchronous resize is in flight.
+    if (this.emulatorClosed) return
+    this.emulator.resize(cols, rows)
+  }
+
   async signal(signal: TerminalSignal): Promise<TerminalSignalResult> {
     if (this.closing) throw new Error('PTY session is closing')
     const targetPgid = await this.terminal.signalForeground(signal)
@@ -399,12 +462,15 @@ export class LocalPtySession implements TerminalBackendSession {
   private readonly onTerminalData = (chunk: Buffer | Uint8Array | string): void => {
     const bytes = typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : chunk
     const data = this.decoder.decode(bytes, { stream: true })
+    this.emitRawOutput(data)
     this.queueEmulatorData(data)
     this.onData(data)
   }
 
   private readonly onTerminalEnd = (): void => {
-    this.onData(this.decoder.decode())
+    const tail = this.decoder.decode()
+    this.emitRawOutput(tail)
+    this.onData(tail)
     this.appendOutput(this.sanitizer.flush())
     this.closeEmulator()
     this.outputEnded.resolve()
@@ -416,7 +482,19 @@ export class LocalPtySession implements TerminalBackendSession {
     this.outputEnded.resolve()
   }
 
+  private emitRawOutput(data: string): void {
+    if (data.length === 0) return
+    for (const listener of [...this.rawOutputListeners]) {
+      try {
+        listener(data)
+      } catch {
+        // UI/Remote consumers are observers; one failing listener must not corrupt PTY transport state.
+      }
+    }
+  }
+
   private onData(data: string): void {
+    if (data.length > 0) this.outputRevision += 1
     const sanitized = this.sanitizer.push(data)
     this.appendOutput(sanitized.text)
     if (sanitized.prompt) {
@@ -495,7 +573,7 @@ export class LocalPtySession implements TerminalBackendSession {
         return
       }
       const elapsed = Date.now() - operation.startedAt
-      const startupHasOutput = !this.initializing || this.scrollback.snapshot().text.length > 0
+      const startupHasOutput = !this.initializing || this.outputRevision > this.initializationOutputRevision
       const acceptsStdinWait = startupHasOutput && foreground !== undefined
         && operation.acceptsStdinWait(foreground.processGroupId, foreground.inputWaiting)
       if (elapsed >= this.config.exactProbeAfterMs && acceptsStdinWait) {
@@ -608,6 +686,7 @@ export class LocalPtySession implements TerminalBackendSession {
   private closeEmulator(): void {
     if (this.emulatorClosed) return
     this.emulatorClosed = true
+    this.rawOutputListeners.clear()
     this.emulatorBuffer = ''
     this.emulatorWriting = false
     const done = this.emulatorWriteDone

@@ -1,0 +1,95 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import type { TerminalSessionClient } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { TerminalOutputFrame } from '@deepseek-ai/dsh-api-session-controller/terminal-types'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { TerminalPane } from '@deepseek-ai/dsh-client-ui-layout/src/client/TerminalPane.tsx'
+
+const t = (key: string): string => ({
+  'spatial.agent.pane': 'Terminal pane',
+  'spatial.agent.startingTerminal': 'Starting terminal',
+  'spatial.agent.closedTerminal': 'Terminal closed',
+  'spatial.agent.agentTerminal': 'Agent terminal',
+  'spatial.agent.stopTerminal': 'Stop terminal',
+  'spatial.agent.closeTerminal': 'Close terminal',
+  'spatial.agent.stop': 'Stop',
+  'spatial.agent.close': 'Close',
+  'spatial.agent.output': 'Terminal output',
+  'spatial.agent.input': 'Terminal input',
+  'spatial.agent.unavailable': 'Terminal unavailable',
+}[key] ?? key)
+
+function fakeTerminal() {
+  const writes: string[] = []
+  return {
+    writes,
+    backends: vi.fn(async () => ({ ok: true as const, value: { items: ['shell'] } })),
+    list: vi.fn(async () => ({ ok: true as const, value: { items: [] } })),
+    open: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        terminalId: 'pty-test',
+        type: 'shell',
+        status: { kind: 'running' as const },
+        motd: 'ready\r\n',
+      },
+    })),
+    output: vi.fn(async function* (): AsyncIterable<TerminalOutputFrame> {
+      yield { data: '\u001b[32magent$\u001b[0m ' }
+    }),
+    write: vi.fn(async (_sessionId: SessionId, _terminalId: string, data: string) => {
+      writes.push(data)
+      return { ok: true as const, value: undefined }
+    }),
+    resize: vi.fn(async () => ({ ok: true as const, value: undefined })),
+    signal: vi.fn(async () => ({ ok: true as const, value: { delivered: true as const, targetPgid: 1 } })),
+    close: vi.fn(async () => ({ ok: true as const, value: { closed: true } })),
+  } satisfies TerminalSessionClient & { writes: string[] }
+}
+
+afterEach(() => { cleanup(); vi.restoreAllMocks() })
+
+describe('TerminalPane', () => {
+  it('opens an owner-scoped PTY, paints VT output, and forwards keyboard input', async () => {
+    const terminal = fakeTerminal()
+    const { getByLabelText, getByRole } = render(
+      <TerminalPane sessionId={'s-terminal' as never} terminal={terminal} t={t} />,
+    )
+
+    await waitFor(() => { expect(getByRole('region', { name: 'Terminal output' }).textContent).toContain('agent$') })
+    expect(terminal.open).toHaveBeenCalledWith('s-terminal', { type: 'shell' }, expect.any(AbortSignal))
+
+    const input = getByLabelText('Terminal input')
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.keyDown(input, { key: 'c', ctrlKey: true })
+    expect(terminal.writes).toEqual(['\r', '\u0003'])
+  })
+
+  it('closes the exact PTY and reports the tile close', async () => {
+    const terminal = fakeTerminal()
+    const onClosed = vi.fn()
+    const { getByRole, queryByRole } = render(
+      <TerminalPane sessionId={'s-terminal' as never} terminal={terminal} t={t} onClosed={onClosed} />,
+    )
+
+    await waitFor(() => { expect(getByRole('button', { name: 'Close terminal' })).toBeTruthy() })
+    fireEvent.click(getByRole('button', { name: 'Close terminal' }))
+
+    await waitFor(() => { expect(terminal.close).toHaveBeenCalledWith('s-terminal', 'pty-test') })
+    expect(onClosed).toHaveBeenCalledTimes(1)
+    expect(queryByRole('button', { name: 'Close terminal' })).toBeNull()
+  })
+
+  it('closes the PTY when its spatial tile is removed', async () => {
+    const terminal = fakeTerminal()
+    const { getByRole, unmount } = render(
+      <TerminalPane sessionId={'s-terminal' as never} terminal={terminal} t={t} />,
+    )
+
+    await waitFor(() => { expect(getByRole('button', { name: 'Close terminal' })).toBeTruthy() })
+    unmount()
+
+    await waitFor(() => { expect(terminal.close).toHaveBeenCalledWith('s-terminal', 'pty-test') })
+  })
+})

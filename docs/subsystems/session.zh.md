@@ -783,6 +783,15 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
 @Remote('cancel') cancel(request: SessionCancelRequest): SessionCancelValue
 
 /**
+ * Request cancellation of one background job visible under a live Session.
+ * The JobRegistry enforces exact-owner access; the browser never receives a
+ * registry service handle.
+ * @param request - owner Session and registry-issued job identity.
+ * @returns registry cancellation admission state.
+ */
+@Remote('stopJob') stopJob(request: SessionStopJobRequest): SessionStopJobValue
+
+/**
  * Read one cold-safe, message-aligned Session history page.
  * @param request - durable address, backward cursor, and page budget.
  * @param signal - cancellation for persistence reads.
@@ -806,7 +815,7 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
 @Remote({ mode: 'stream' }) control(signal: AbortSignal): AsyncIterable<SessionControlFrame>
 ```
 
-Types: [SessionId](core.zh.md) · [SessionInspection](persistence.zh.md) · [SessionSearchRequest](session-query.zh.md)
+Types: [SessionId](core.zh.md) · [SessionInspection](persistence.zh.md) · [SessionSearchRequest](session-query.zh.md) · [SessionStopJobRequest](jobs.zh.md) · [SessionStopJobValue](jobs.zh.md)
 
 Source: [`packages/api/session-controller/src/index.ts`](../../packages/api/session-controller/src/index.ts)
 

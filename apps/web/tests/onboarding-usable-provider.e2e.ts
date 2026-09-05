@@ -71,7 +71,7 @@ describe.skipIf(MODE === 'record')('web e2e: another usable provider ends first-
 
     // Cancelling the setup card must not close the independent add-provider
     // draft beside it.
-    await settings.getByRole('button', { name: '取消', exact: true }).first().click()
+    await settings.locator('li[class*="setupCard"]').getByRole('button', { name: '取消', exact: true }).click()
     expect(await settings.getByLabel('提供方').count()).toBe(1)
     await expect.poll(
       async () => settings.getByRole('textbox', { name: 'API 密钥', exact: true }).count(),
@@ -88,8 +88,10 @@ describe.skipIf(MODE === 'record')('web e2e: another usable provider ends first-
   it('stops prompting for DeepSeek once the other provider can serve requests', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-onboarding-other-provider'))
     const settings = page.getByRole('dialog', { name: '设置' })
-    await settings.getByRole('textbox', { name: 'API 密钥', exact: true }).fill('sk-e2e-minimax')
-    await settings.getByRole('button', { name: '保存', exact: true }).click()
+    const addKey = settings.getByPlaceholder('输入 API 密钥，或留空使用环境认证').last()
+    await addKey.fill('sk-e2e-minimax')
+    const addCard = addKey.locator('xpath=ancestor::div[contains(@class, "addCard")]')
+    await addCard.getByRole('button', { name: '保存', exact: true }).click()
     await settings.getByText('已保存 minimax-cn。', { exact: true }).waitFor({ timeout: 15_000 })
 
     // Only minimax-cn is reachable; DeepSeek still holds no credential.

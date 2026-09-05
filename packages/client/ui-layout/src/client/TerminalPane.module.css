@@ -1,0 +1,121 @@
+.pane {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: #101312;
+  color: #d9e3dc;
+  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Consolas, monospace);
+}
+
+.header {
+  flex: none;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 9px 0 12px;
+  border-bottom: 1px solid color-mix(in srgb, #d9e3dc 12%, transparent);
+  background: color-mix(in srgb, #d9e3dc 5%, transparent);
+}
+
+.title,
+.actions {
+  display: flex;
+  align-items: center;
+}
+
+.title {
+  min-width: 0;
+  gap: 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #b8c8be;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.prompt {
+  color: #68d6a7;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.actions { gap: 5px; }
+
+.action {
+  padding: 3px 7px;
+  border: 1px solid color-mix(in srgb, #d9e3dc 16%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: #aabbb0;
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.action:hover,
+.action:focus-visible {
+  border-color: color-mix(in srgb, #68d6a7 50%, transparent);
+  color: #e8f3eb;
+  outline: none;
+}
+
+.action:disabled { cursor: wait; opacity: 0.55; }
+
+.viewport {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 14px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #68d6a7 4%, transparent), transparent 25%),
+    #101312;
+  cursor: text;
+}
+
+.viewport pre {
+  position: relative;
+  z-index: 0;
+  min-height: 100%;
+  margin: 0;
+  white-space: pre;
+  color: #d9e3dc;
+  font: 12px/18px var(--ds-font-family-code, ui-monospace, SFMono-Regular, Consolas, monospace);
+}
+
+.input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  opacity: 0;
+}
+
+.error {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  left: 12px;
+  z-index: 2;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, #ef8e8e 35%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, #401b1b 94%, transparent);
+  color: #ffc4c4;
+  font: 10px/1.4 var(--ds-font-family-code, ui-monospace, SFMono-Regular, Consolas, monospace);
+}

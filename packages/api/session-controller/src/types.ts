@@ -490,6 +490,17 @@ export interface SessionJob {
   readonly finishedAt?: number
 }
 
+/** Browser request to stop one owner-fenced background job. */
+export interface SessionStopJobRequest {
+  readonly sessionId: SessionId
+  readonly jobId: JobId
+}
+
+/** Registry result after a human stop request. */
+export interface SessionStopJobValue {
+  readonly result: 'requested' | 'already-finished'
+}
+
 /** Complete live control baseline emitted once per control stream generation. */
 export interface SessionControlBaseline {
   readonly queues: Readonly<Record<SessionId, readonly SessionQueuedItem[]>>

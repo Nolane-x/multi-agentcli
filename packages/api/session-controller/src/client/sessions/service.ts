@@ -5,14 +5,13 @@
  * Fiber + ctx.extend scope tag; one scope per session, agent id === session
  * id), stable SessionBinding cache, breadcrumb-route projection.
  *
- * Scope lifecycle is stage-driven: a scope is minted lazily on first
- * resolution (pure — resolution has no side effects and is render-safe);
- * the event window and deferred teardown key off the STAGED session, which
- * follows `list.current` exactly. Staging is the open signal: the window
- * opens ⟺ the session is on stage (the stage is `current`; the staged
- * state can widen to a multi-pane list later). A session leaving the list
- * tears its scope down immediately unless it is the staged one, whose scope
- * survives frozen (read-only view) until the stage moves on.
+ * Scope resolution stays pure and render-safe. The selected Session owns the
+ * navigation-stage retention rule (masked gaps and deferred teardown), while
+ * additional listed Sessions may be explicitly staged for multi-pane views:
+ * staging opens their resident history/follow source without mutating
+ * `list.current`. A Session leaving the eligible list is still pruned unless
+ * it is the navigation-stage occupant whose frozen view must survive until
+ * selection moves on.
  */
 import type { Context, Fiber } from '@deepseek-ai/cordis'
 import type { SubagentAddress } from '@deepseek-ai/dsh-subagent/client'
@@ -29,6 +28,7 @@ import type { RemoteFailure, RemoteResult } from '@deepseek-ai/dsh-typert-protoc
 import type { SessionEventSource } from '../contract/events.ts'
 import type { SessionFace } from '../contract/session.ts'
 import type { AgentContext, ISessions } from '../contract/sessions.ts'
+import { createTerminalSessionClient, type TerminalSessionClient } from '../terminal-session.ts'
 import { createScope, scopeOf as scopeTagOf } from '../scope.ts'
 import { SessionManager } from './manager.ts'
 import type { SessionRemotes } from './remotes.ts'
@@ -174,7 +174,7 @@ interface ScopeRecord {
   fiber: Fiber
   ctx: AgentContext
   binding: SessionBinding
-  /** The concrete Session for runtime-internal entry points (staging open()); the binding carries only the outward face. */
+  /** The concrete Session for runtime-internal entry points (history staging); the binding carries only the outward face. */
   session: Session
 }
 
@@ -187,6 +187,8 @@ export class ClientSessions implements ISessions {
    * reports the same number.
    */
   readonly searchResultLimit = SESSION_SEARCH_RESULT_LIMIT
+  /** Owner-addressed terminal capability shared by all UI consumers. */
+  readonly terminal?: TerminalSessionClient
   /** List snapshot store (list RPC + host stream increments; re-pulled on reconnect) — the useSessions standard feed, current included. */
   readonly list: SnapshotStore<SessionListState>
   /** The object-layer instance cluster and frame dispatch entry. */
@@ -205,13 +207,13 @@ export class ClientSessions implements ISessions {
   /** In-flight scope drops remain here after records leave `scopes`, so root disposal can await quiescence. */
   private readonly scopeDrops = new Set<Promise<void>>()
   /**
-   * The staged session id — follows `list.current` exactly, holding its last
-   * defined value across masked gaps (a transiently absent selection blanks
-   * `current` without moving the stage, so reconnect re-pulls and removals
-   * keep the staged scope's frozen view alive until the stage moves on).
+   * Navigation-stage session id — follows `list.current` exactly, holding its
+   * last defined value across masked gaps. Explicit multi-pane staging does
+   * not move this pointer and therefore cannot change selection-retention
+   * semantics.
    */
   private watched: SessionId | undefined
-  /** Removed-while-staged sessions whose teardown waits for the stage to move away. */
+  /** Removed-while-navigation-staged sessions whose teardown waits for selection to move away. */
   private readonly deferredRemovals = new Set<SessionId>()
 
   /**
@@ -222,6 +224,7 @@ export class ClientSessions implements ISessions {
     private readonly rootCtx: Context,
     remote: SessionRemotes,
   ) {
+    if (remote.terminal) this.terminal = createTerminalSessionClient(remote.terminal)
     this.selection = createSnapshotStore<SessionSelection>(
       {},
       { persist: { name: 'dsh.sessions.current' } })
@@ -240,12 +243,9 @@ export class ClientSessions implements ISessions {
     const disposeManagerProjection = this.manager.subscribe(() => {
       this.projectList()
     })
-    // Stage follower: every current write (open() and projection alike)
-    // re-evaluates staging, so startup restore (persisted selection validated
-    // by the projection) and reconnect resurfacing open their window with no
-    // dedicated code path. Safe to run synchronously inside the store notify:
-    // the follower writes no list state — session.open()'s synchronous prefix
-    // touches only session-side state and its own microtask-batched notifier.
+    // Selection-stage follower: every current write (open() and projection
+    // alike) re-evaluates retention and ensures the selected resident source
+    // is open. Explicit panes use stage() and never touch this pointer.
     const disposeStageFollower = this.list.subscribe(() => {
       this.followCurrent()
     })
@@ -269,6 +269,20 @@ export class ClientSessions implements ISessions {
    */
   open(id: SessionId): void {
     this.manager.select(id)
+  }
+
+  /**
+   * Open one already-addressable Session's resident event source without
+   * changing selection. Session.open() is idempotent, so repeated multi-pane
+   * staging is cheap; a stale id that has already left the eligible set is a
+   * race-safe no-op.
+   * @param id - listed or retained Session identity.
+   */
+  stage(id: SessionId): void {
+    const record = this.resolve(id)
+    if (record === undefined) return
+    void record.session.open()
+    void this.manager.refreshSubagents(id)
   }
 
   /**
@@ -310,8 +324,8 @@ export class ClientSessions implements ISessions {
    * Clear the current selection so the layout shows the no-session empty
    * state (new-session affordance and the workspace preselection flow).
    * Wipes the persisted selection too — a reload stays on empty until the
-   * user opens or starts a session. The staged scope keeps its frozen view
-   * per the masked-gap contract until the next open() moves the stage.
+   * user opens or starts a session. The navigation-stage scope keeps its
+   * frozen view per the masked-gap contract until the next open() moves it.
    */
   clear(): void {
     this.manager.clearSelection()
@@ -511,11 +525,10 @@ export class ClientSessions implements ISessions {
   }
 
   /**
-   * Move the stage to the list's current session: sweep teardowns deferred
-   * behind the previous occupant and pull the new occupant's history window.
-   * Staging IS the open signal — the window opens ⟺ the session is on stage
-   * — and open() is idempotent (an in-flight or completed open no-ops; a
-   * failed one retries the next time current is touched).
+   * Move the navigation stage to the list's current session: sweep teardowns
+   * deferred behind the previous occupant, then ensure the new current
+   * Session is resident. Explicit multi-pane stage() calls never move this
+   * retention pointer.
    */
   private followCurrent(): void {
     const snapshot = this.list.getSnapshot()
@@ -526,14 +539,7 @@ export class ClientSessions implements ISessions {
     if (current === undefined || snapshot.byId[current] === undefined || current === this.watched) return
     this.watched = current
     this.sweepDeferred()
-    const record = this.resolve(current)
-    /* v8 ignore next 3 -- defensive: current is always a listed id (open()
-     * validates and the projection masks absent selections), so resolve
-     * cannot miss; kept so a future current writer cannot crash the notify. */
-    if (record !== undefined) {
-      void record.session.open()
-      void this.manager.refreshSubagents(current)
-    }
+    this.stage(current)
   }
 
   /**
@@ -646,7 +652,7 @@ export class ClientSessions implements ISessions {
     this.pruneScopes()
   }
 
-  /** Tear down scope + instance for no-longer-eligible sessions off stage; the staged one defers until the stage moves. */
+  /** Tear down scope + instance for no-longer-eligible sessions off stage; the navigation-stage one defers until selection moves. */
   private pruneScopes(): void {
     if (this.list.getSnapshot().phase === 'pending') return
     for (const [id, record] of this.scopes) {
@@ -693,12 +699,13 @@ export class ClientSessions implements ISessions {
     ])
   }
 
-  /** Run deferred teardowns whose session is no longer staged (called when the stage moves). */
+  /** Run deferred teardowns whose session is no longer navigation-staged (called when selection moves). */
   private sweepDeferred(): void {
     for (const id of [...this.deferredRemovals]) {
-      /* v8 ignore next -- defensive: only the staged id ever defers, and every
-       * stage move sweeps first, so the set cannot contain the id the stage just
-       * moved to; kept as a guard against future extra sweep call sites. */
+      /* v8 ignore next -- defensive: only the navigation-stage id ever defers,
+       * and every selection move sweeps first, so the set cannot contain the
+       * id the stage just moved to; kept as a guard against future extra sweep
+       * call sites. */
       if (id === this.watched) continue
       // Eligible again? (A re-added id cancels the deferred teardown.)
       if (this.eligible(id)) {

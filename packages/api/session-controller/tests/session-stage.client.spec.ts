@@ -1,0 +1,127 @@
+import { Context } from '@deepseek-ai/cordis'
+import { describe, expect, it, vi } from 'vitest'
+import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
+import { ClientSessions } from '../src/client/sessions/service.ts'
+import { FakeApiClient, fakeRemote, ok } from './fake-api.client.ts'
+import { TestSessions } from '../../../test-support/client-runtime/src/sessions.ts'
+
+const sid = (value: string): SessionId => value as SessionId
+
+async function readyContext(): Promise<Context> {
+  const ctx = new Context()
+  await ctx.plugin(() => undefined)
+  return ctx
+}
+
+async function feedList(
+  svc: ClientSessions,
+  api: FakeApiClient,
+  ids: readonly SessionId[],
+): Promise<void> {
+  api.onList = () => Promise.resolve(ok({
+    items: ids.map((sessionId, index) => ({
+      sessionId,
+      updatedAt: index + 1,
+      running: false,
+      blank: false,
+    })),
+  }) as never)
+  await svc.refresh()
+  await Promise.resolve()
+}
+
+describe('session staging', () => {
+  it('records resident staging and ignores stale fixture ids', async () => {
+    const ctx = new Context()
+    const sessions = new TestSessions(async (fn) => { await fn() }, ctx)
+    const id = await sessions.add({ id: 'fixture-stage' })
+
+    sessions.stage(id)
+    sessions.stage(sid('missing'))
+
+    expect(sessions.calls.slice(-2)).toEqual([
+      { method: 'stage', args: [id] },
+      { method: 'stage', args: [sid('missing')] },
+    ])
+  })
+
+  it('opens a second resident Session without changing the current selection', async () => {
+    const ctx = await readyContext()
+    const api = new FakeApiClient()
+    const svc = new ClientSessions(ctx, fakeRemote(api))
+
+    await feedList(svc, api, [sid('s1'), sid('s2')])
+    svc.open(sid('s1'))
+    await vi.waitFor(() => {
+      expect(api.activeFollows(sid('s1'))).toBe(1)
+    })
+
+    svc.stage(sid('s2'))
+
+    await vi.waitFor(() => {
+      expect(api.activeFollows(sid('s2'))).toBe(1)
+    })
+    expect(svc.list.getSnapshot().current).toBe(sid('s1'))
+    expect(svc.binding(sid('s2'))).toBeDefined()
+
+    await ctx.fiber.dispose()
+  })
+
+  it('keeps repeated staging idempotent and preserves global selection', async () => {
+    const ctx = await readyContext()
+    const api = new FakeApiClient()
+    const svc = new ClientSessions(ctx, fakeRemote(api))
+
+    await feedList(svc, api, [sid('s1'), sid('s2')])
+    svc.open(sid('s1'))
+    svc.stage(sid('s2'))
+    svc.stage(sid('s2'))
+    svc.stage(sid('s2'))
+
+    await vi.waitFor(() => {
+      expect(api.activeFollows(sid('s2'))).toBe(1)
+    })
+    expect(svc.list.getSnapshot().current).toBe(sid('s1'))
+
+    await ctx.fiber.dispose()
+  })
+
+  it('tears down an explicitly staged pane after its Session leaves the eligible list', async () => {
+    const ctx = await readyContext()
+    const api = new FakeApiClient()
+    const svc = new ClientSessions(ctx, fakeRemote(api))
+
+    await feedList(svc, api, [sid('s1'), sid('s2')])
+    svc.open(sid('s1'))
+    svc.stage(sid('s2'))
+    await vi.waitFor(() => {
+      expect(api.activeFollows(sid('s2'))).toBe(1)
+    })
+
+    await feedList(svc, api, [sid('s1')])
+
+    expect(svc.binding(sid('s2'))).toBeUndefined()
+    await vi.waitFor(() => {
+      expect(api.activeFollows(sid('s2'))).toBe(0)
+    })
+    expect(svc.list.getSnapshot().current).toBe(sid('s1'))
+
+    await ctx.fiber.dispose()
+  })
+
+  it('ignores an id that is no longer addressable instead of mutating selection', async () => {
+    const ctx = await readyContext()
+    const api = new FakeApiClient()
+    const svc = new ClientSessions(ctx, fakeRemote(api))
+
+    await feedList(svc, api, [sid('s1')])
+    svc.open(sid('s1'))
+    svc.stage(sid('missing'))
+
+    expect(svc.list.getSnapshot().current).toBe(sid('s1'))
+    expect(svc.binding(sid('missing'))).toBeUndefined()
+    expect(api.activeFollows(sid('missing'))).toBe(0)
+
+    await ctx.fiber.dispose()
+  })
+})
