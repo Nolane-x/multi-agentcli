@@ -224,7 +224,12 @@ describe('web e2e: long Chat interaction contract', () => {
     const loadEarlier = page.getByRole('button', { name: 'Load earlier', exact: true })
     const loadedMarks = turnNavigation.getByRole('button', { name: /^Jump to turn / })
     const loadedBefore = await loadedMarks.count()
-    await loadEarlier.click()
+    // The button is above the current tail. A Playwright click would first
+    // scroll the conversation to reveal it, racing the paging request with a
+    // reader scroll sample. Dispatch the already-visible DOM action directly
+    // after confirming the pager is idle.
+    await expect.poll(() => loadEarlier.isDisabled(), { timeout: 15_000 }).toBe(false)
+    await loadEarlier.evaluate((button: HTMLButtonElement) => { button.click() })
     // Paging converts marks to their loaded form without moving the
     // fixed-pitch ladder.
     // The first history page crosses the scaffold's remote boundary. Keep
