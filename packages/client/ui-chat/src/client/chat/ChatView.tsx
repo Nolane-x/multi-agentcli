@@ -650,6 +650,20 @@ export function ChatView({
     return () => { observer.disconnect() }
   }, [])
 
+  // Some streaming updates change text or replace descendants without
+  // changing the column's own flex box. Keep pinned readers following those
+  // mutations as well; the same guard preserves an active reader gesture.
+  useEffect(() => {
+    const column = columnRef.current
+    if (column === null || typeof MutationObserver === 'undefined') return
+    const observer = new MutationObserver(() => {
+      followRef.current?.()
+      activeTurnRef.current?.()
+    })
+    observer.observe(column, { childList: true, subtree: true, characterData: true })
+    return () => { observer.disconnect() }
+  }, [])
+
   // A failed/empty page leaves the head unchanged. Once the request leaves
   // its busy state there is no future prepend for the saved anchor to own.
   useEffect(() => {

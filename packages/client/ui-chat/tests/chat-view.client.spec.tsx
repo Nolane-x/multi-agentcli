@@ -2373,6 +2373,36 @@ describe('ChatView', () => {
     expect(observe).toHaveBeenCalledTimes(1)
   })
 
+  it('follows pinned stream mutations when the flow box keeps its flex size', () => {
+    let notify: (() => void) | undefined
+    const observe = vi.fn()
+    class MutationObserverStub {
+      constructor(callback: MutationCallback) {
+        notify = () => { callback([], this as unknown as MutationObserver) }
+      }
+
+      observe = observe
+      disconnect = vi.fn()
+    }
+    vi.stubGlobal('MutationObserver', MutationObserverStub)
+    const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
+    const metrics = installScrollMetrics(scroller, 1_000, 300)
+    scroller.scrollTop = 700
+    fireEvent.scroll(scroller)
+    fireEvent(scroller, new Event('scrollend'))
+
+    metrics.setHeight(1_200)
+    act(() => { notify?.() })
+    expect(scroller.scrollTop).toBe(900)
+    readerScroll(scroller, 200)
+    metrics.setHeight(1_400)
+    act(() => { notify?.() })
+    expect(scroller.scrollTop).toBe(200)
+    expect(observe).toHaveBeenCalledTimes(1)
+  })
+
   it('pinned dynamic-height updates select the latest Turn without reading row geometry', () => {
     let notify: (() => void) | undefined
     let nextFrame = 0

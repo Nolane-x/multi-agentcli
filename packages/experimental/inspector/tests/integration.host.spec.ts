@@ -370,6 +370,15 @@ describe('experimental Inspector real Worker', () => {
     await Promise.all([cdp.call('Runtime.enable'), secondCdp.call('Runtime.enable')])
     const firstContext = await clientContext(cdp)
     const secondContext = await clientContext(secondCdp)
+    // Runtime.enable acknowledges the worker-side subscription before the
+    // isolated client has necessarily installed its console wrapper. A
+    // client evaluation is an ordered protocol barrier for that setup frame.
+    const [firstReady, secondReady] = await Promise.all([
+      cdp.call('Runtime.evaluate', { expression: '1 + 1', contextId: firstContext }),
+      secondCdp.call('Runtime.evaluate', { expression: '1 + 1', contextId: secondContext }),
+    ])
+    expect(firstReady.error).toBeUndefined()
+    expect(secondReady.error).toBeUndefined()
     const value = { owner: 'client-console' }
     const marker = 'client-console-event'
     await client.log(value, marker)
