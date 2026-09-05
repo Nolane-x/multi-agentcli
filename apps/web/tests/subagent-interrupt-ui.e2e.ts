@@ -210,7 +210,8 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
       const stop = page.getByRole('button', { name: 'Stop generating' })
       expect(await stop.count()).toBe(1)
       expect(await stop.isEnabled()).toBe(true)
-      const send = page.getByRole('button', { name: 'Send message' })
+      const currentPane = page.locator('[data-agent-current]')
+      const send = currentPane.getByRole('button', { name: 'Send message' })
       expect(await send.count()).toBe(1)
       expect(await send.isDisabled()).toBe(true)
       await compareOrRefreshGolden(
@@ -259,11 +260,13 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
   it('interrupts through subagents/interruptByParent, parks the follow-up, and resumes it FIFO', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-subagent-interrupt-flow'))
     // Reselect the child with the truthful catalog: parent available again.
-    await page.getByRole('navigation', { name: 'Session hierarchy' })
-      .getByRole('button').first().click()
-    await page.getByRole('button', { name: /1 subagent/ }).click()
+    const currentPane = page.locator('[data-agent-current]')
+    await currentPane.getByRole('navigation', { name: 'Session hierarchy' })
+      .locator('button:not([disabled])').first().click()
+    await page.locator('[data-agent-current]').getByRole('button', { name: /1 subagent/ }).click()
     await page.getByRole('treeitem', { name: new RegExp(LABEL) }).click()
-    const input = page.locator('[data-agent-current]').getByRole('textbox', { name: 'Message or run a task... / commands, @ files or sessions' })
+    const childPane = page.locator('[data-agent-current]')
+    const input = childPane.getByRole('textbox', { name: 'Message or run a task... / commands, @ files or sessions' })
     await input.waitFor({ timeout: 15_000 })
     expect(await input.isDisabled()).toBe(false)
 
@@ -271,7 +274,7 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
     const promptResponse = page.waitForResponse(response =>
       new URL(response.url()).pathname === '/api/subagents/prompt')
     await input.fill(FOLLOWUP)
-    await page.getByRole('button', { name: 'Send message' }).click()
+    await childPane.getByRole('button', { name: 'Send message' }).click()
     expect(((await (await promptResponse).json()) as { result: { ok: boolean } }).result)
       .toMatchObject({ ok: true })
 
@@ -295,7 +298,7 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
     expect(child).toBeDefined()
     expect(child!.inbox.nextTurn).toHaveLength(2)
     expect(child!.session.snapshotEvents().filter(event => event.type === 'turn/start')).toHaveLength(2)
-    await page.getByRole('button', { name: 'Send message' }).waitFor({ timeout: 15_000 })
+    await childPane.getByRole('button', { name: 'Send message' }).waitFor({ timeout: 15_000 })
 
     // Only the waking send resumes the parked queue, FIFO, to settlement.
     await input.fill(WAKING)

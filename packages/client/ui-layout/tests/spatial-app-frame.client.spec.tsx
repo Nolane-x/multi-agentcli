@@ -122,7 +122,7 @@ function mountSpatialFrame(
       t={translate}
     />,
   )
-  return { ...view, openAgent, stageAgent, state }
+  return { ...view, openAgent, stageAgent, state, actions: store.actions }
 }
 
 beforeEach(() => {
@@ -152,6 +152,19 @@ describe('AppFrame spatial agent canvas', () => {
       'agent-1', 'agent-2', 'agent-3', 'agent-4', 'agent-5',
     ])
     expect(container.textContent).toContain('LEAD')
+  })
+
+  it('keeps the canvas clear of the expanded sidebar on narrow viewports', () => {
+    window.innerWidth = 700
+    const { container, actions } = mountSpatialFrame(1)
+
+    act(() => {
+      actions.setNarrow(true)
+      actions.toggleSidebar()
+    })
+
+    const center = container.querySelector('[class*="centerCol"]') as HTMLElement
+    expect(Number.parseFloat(center.style.paddingLeft)).toBeGreaterThan(74)
   })
 
   it('derives leader and child identity from the Session graph instead of rendered order', () => {

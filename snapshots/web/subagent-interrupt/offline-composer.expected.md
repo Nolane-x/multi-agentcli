@@ -28,5 +28,8 @@
 - button "Commands" [disabled]:
   - img
 - 'button "Access mode, current: Custom" [disabled]': Custom
+- button "Select model, current DeepSeek-V4-Flash":
+  - text: DeepSeek-V4-Flash
+  - img
 - button "Stop generating"
 - button "Send message" [disabled]

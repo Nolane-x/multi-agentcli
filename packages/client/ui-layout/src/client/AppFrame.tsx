@@ -587,7 +587,7 @@ export function AppFrame({
       </div>
 
       <CenterColumn
-        leftInset={narrow ? 74 : sidebarCollapsed ? 86 : cols.sidebar + 18}
+        leftInset={sidebarCollapsed ? (narrow ? 74 : 86) : cols.sidebar + 18}
         rightInset={rightInset}
       >
         {!mosaicVisible ? (

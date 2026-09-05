@@ -86,7 +86,9 @@ it('renders durable record images in the Trajectory details panel from the share
   const chatSrc = document.querySelector('[data-align="end"] img')?.getAttribute('src')
   if (chatSrc === null || chatSrc === undefined) throw new Error('chat gallery image missing')
 
-  fireEvent.click(screen.getByRole('tab', { name: 'Trajectory' }))
+  const currentPane = document.querySelector('[data-agent-current]')
+  if (!(currentPane instanceof HTMLElement)) throw new Error('current spatial agent pane missing')
+  fireEvent.click(within(currentPane).getByRole('tab', { name: 'Trajectory' }))
   const userRow = await scrollRowIntoWindow('历史用户图片')
   fireEvent.click(userRow)
 
