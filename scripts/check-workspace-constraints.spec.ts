@@ -114,7 +114,7 @@ describe('package payload constraints', () => {
   it('keeps the GitHub desktop app out of the npm release-member policy', () => {
     expect(checkWorkspaceManifest({
       dir: 'apps/desktop',
-      manifest: { name: '@deepseek-ai/dsh-desktop', private: true },
+      manifest: { name: '@deepseek-ai/dsh-desktop', version: '0.1.3-alpha.1', private: true },
     })).toEqual([])
   })
 
