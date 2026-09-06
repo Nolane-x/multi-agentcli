@@ -137,8 +137,8 @@ export function apply(ctx: ClientContext): void {
           ...terminal === undefined ? {} : { terminal },
           ...desktopTerminal === undefined ? {} : {
             terminalMode: 'desktop' as const,
-            terminalDefaultCwd: desktopTerminal.defaultCwd,
-            pickTerminalCwd: desktopTerminal.pickCwd,
+            terminalDefaultCwd: () => desktopTerminal.defaultCwd(),
+            pickTerminalCwd: () => desktopTerminal.pickCwd(),
           },
         }
       },
