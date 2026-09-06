@@ -24,6 +24,7 @@ type TerminalKiller = Box<dyn FnMut() -> std::io::Result<()> + Send>;
 enum NativeTerminalEvent {
     Output(String),
     Exited,
+    Eof,
 }
 
 #[derive(Serialize)]
@@ -193,7 +194,7 @@ fn desktop_terminal_open(
         let mut buffer = [0_u8; 8192];
         loop {
             match reader.read(&mut buffer) {
-                Ok(0) => return,
+                Ok(0) => break,
                 Ok(size) => {
                     let text = String::from_utf8_lossy(&buffer[..size]).into_owned();
                     if output_channel.send(NativeTerminalEvent::Output(text)).is_err() {
@@ -201,9 +202,10 @@ fn desktop_terminal_open(
                     }
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(_) => return,
+                Err(_) => break,
             }
         }
+        let _ = output_channel.send(NativeTerminalEvent::Eof);
     });
 
     let exit_channel = on_event;
