@@ -306,6 +306,81 @@ fn desktop_terminal_close(
     Ok(true)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{sync::mpsc, time::Duration};
+
+    #[test]
+    fn native_pty_round_trip_preserves_marker() {
+        let pty_system = native_pty_system();
+        let pair = pty_system
+            .openpty(PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .expect("native PTY allocation should succeed");
+
+        let command = CommandBuilder::new_default_prog();
+        let mut child = pair
+            .slave
+            .spawn_command(command)
+            .expect("default shell should start inside native PTY");
+        drop(pair.slave);
+
+        let mut reader = pair
+            .master
+            .try_clone_reader()
+            .expect("native PTY reader should open");
+        let mut writer = pair
+            .master
+            .take_writer()
+            .expect("native PTY writer should open");
+        let mut killer = child.clone_killer();
+        let (sender, receiver) = mpsc::channel();
+        let reader_thread = thread::spawn(move || {
+            let mut output = Vec::new();
+            let result = reader.read_to_end(&mut output).map(|_| output);
+            let _ = sender.send(result);
+        });
+
+        writer
+            .write_all(b"echo DSH_PTY_SMOKE\rexit\r")
+            .expect("native PTY should accept shell input");
+        writer.flush().expect("native PTY input should flush");
+        drop(writer);
+
+        let output = match receiver.recv_timeout(Duration::from_secs(20)) {
+            Ok(Ok(output)) => output,
+            Ok(Err(error)) => {
+                let _ = killer.kill();
+                let _ = child.wait();
+                let _ = reader_thread.join();
+                panic!("native PTY output read failed: {error}");
+            }
+            Err(error) => {
+                let _ = killer.kill();
+                let _ = child.wait();
+                let _ = reader_thread.join();
+                panic!("native PTY round trip timed out: {error}");
+            }
+        };
+
+        child.wait().expect("default shell should exit cleanly");
+        reader_thread
+            .join()
+            .expect("native PTY reader thread should not panic");
+
+        let text = String::from_utf8_lossy(&output);
+        assert!(
+            text.contains("DSH_PTY_SMOKE"),
+            "native PTY round trip lost marker; output: {text:?}"
+        );
+    }
+}
+
 /** Start the desktop shell around the built, worker-capable Harness page. */
 pub fn run() {
     tauri::Builder::default()
