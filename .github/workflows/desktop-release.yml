@@ -28,26 +28,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
 
-      - name: Generate Cargo lockfile
-        run: cargo generate-lockfile --manifest-path apps/desktop/src-tauri/Cargo.toml
+      - name: Verify committed Cargo lockfile
+        run: cargo metadata --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --format-version 1 --no-deps > /dev/null
 
-      - name: Commit generated Cargo lockfile
-        if: github.event_name == 'pull_request'
-        shell: bash
-        run: |
-          if git diff --quiet -- apps/desktop/src-tauri/Cargo.lock; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add apps/desktop/src-tauri/Cargo.lock
-          git commit -m "chore(desktop): refresh Cargo lockfile [skip ci]"
-          git push origin "HEAD:${{ github.head_ref }}"
-
-      - name: Upload generated Cargo lockfile
+      - name: Upload committed Cargo lockfile
         uses: actions/upload-artifact@v4
         with:
           name: desktop-cargo-lock
@@ -67,7 +52,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Use generated Cargo lockfile
+      - name: Use committed Cargo lockfile
         uses: actions/download-artifact@v4
         with:
           name: desktop-cargo-lock
