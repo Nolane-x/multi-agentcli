@@ -416,49 +416,83 @@ mod tests {
             .expect("native PTY writer should open");
         let mut killer = child.clone_killer();
         let (sender, receiver) = mpsc::channel();
+        let expected = EXPECTED_MARKER.as_bytes().to_vec();
         let reader_thread = thread::spawn(move || {
             let mut output = Vec::new();
-            let result = reader.read_to_end(&mut output).map(|_| output);
-            let _ = sender.send(result);
+            let mut buffer = [0_u8; 4096];
+            loop {
+                match reader.read(&mut buffer) {
+                    Ok(0) => {
+                        let _ = sender.send(Ok(output));
+                        return;
+                    }
+                    Ok(size) => {
+                        output.extend_from_slice(&buffer[..size]);
+                        if output
+                            .windows(expected.len())
+                            .any(|window| window == expected.as_slice())
+                        {
+                            let _ = sender.send(Ok(output));
+                            return;
+                        }
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                    Err(error) => {
+                        let _ = sender.send(Err(error));
+                        return;
+                    }
+                }
+            }
         });
 
         #[cfg(windows)]
-        let smoke_command = b"echo %DSH_PTY_SMOKE_VALUE%\rexit\r";
+        let smoke_command = b"echo %DSH_PTY_SMOKE_VALUE%\r";
         #[cfg(not(windows))]
-        let smoke_command = b"printf '%s\\n' \"$DSH_PTY_SMOKE_VALUE\"\rexit\r";
+        let smoke_command = b"printf '%s\\n' \"$DSH_PTY_SMOKE_VALUE\"\r";
 
         writer
             .write_all(smoke_command)
             .expect("native PTY should accept shell input");
         writer.flush().expect("native PTY input should flush");
-        drop(writer);
 
-        let output = match receiver.recv_timeout(Duration::from_secs(20)) {
-            Ok(Ok(output)) => output,
+        let received = receiver.recv_timeout(Duration::from_secs(20));
+        match received {
+            Ok(Ok(output)) => {
+                let _ = killer.kill();
+                drop(writer);
+                drop(pair.master);
+                child.wait().expect("default shell should be reaped after smoke test");
+                reader_thread
+                    .join()
+                    .expect("native PTY reader thread should not panic");
+
+                let text = String::from_utf8_lossy(&output);
+                assert!(
+                    text.contains(EXPECTED_MARKER),
+                    "native PTY round trip lost executed marker; output: {text:?}"
+                );
+            }
             Ok(Err(error)) => {
                 let _ = killer.kill();
+                drop(writer);
+                drop(pair.master);
                 let _ = child.wait();
                 let _ = reader_thread.join();
                 panic!("native PTY output read failed: {error}");
             }
             Err(error) => {
+                // ConPTY does not guarantee EOF merely because the child exits.
+                // Tear the handles down, but never block this timeout path on a
+                // reader join; otherwise the test that detects a PTY hang can
+                // itself hang indefinitely.
                 let _ = killer.kill();
-                let _ = child.wait();
-                let _ = reader_thread.join();
-                panic!("native PTY round trip timed out: {error}");
+                drop(writer);
+                drop(pair.master);
+                drop(child);
+                drop(reader_thread);
+                panic!("native PTY marker timed out: {error}");
             }
-        };
-
-        child.wait().expect("default shell should exit cleanly");
-        reader_thread
-            .join()
-            .expect("native PTY reader thread should not panic");
-
-        let text = String::from_utf8_lossy(&output);
-        assert!(
-            text.contains(EXPECTED_MARKER),
-            "native PTY round trip lost executed marker; output: {text:?}"
-        );
+        }
     }
 }
 
