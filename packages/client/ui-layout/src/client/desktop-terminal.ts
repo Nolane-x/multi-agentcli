@@ -14,7 +14,7 @@ import type {
 export const DESKTOP_TERMINAL_BACKEND = 'desktop-native'
 
 interface NativeTerminalEvent {
-  readonly event: 'output' | 'exited'
+  readonly event: 'output' | 'exited' | 'eof'
   readonly data?: string
 }
 
@@ -149,7 +149,10 @@ export function createDesktopTerminalWorkspace(): DesktopTerminalWorkspace | und
           if (event.data !== undefined && event.data !== '') pending.controller.enqueue({ data: event.data })
           return
         }
-        pending.exited = true
+        if (event.event === 'exited') {
+          pending.exited = true
+          return
+        }
         closeStream(pending)
       })
 
