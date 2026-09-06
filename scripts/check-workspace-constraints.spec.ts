@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  checkDshFamilyVersion,
   checkExperimentalDependencyIsolation,
   checkExperimentalManifest,
   checkWorkspaceManifest,
@@ -77,11 +78,43 @@ describe('experimental workspace constraints', () => {
   })
 })
 
+describe('dsh family version coherence', () => {
+  it('rejects a package carrying a stale shared version', () => {
+    expect(checkDshFamilyVersion(
+      { name: '@deepseek-ai/dsh-http-proxy', version: '0.1.2-alpha.5' },
+      '0.1.2-rc.1',
+    )).toBe('@deepseek-ai/dsh-http-proxy: package.json version must match root version 0.1.2-rc.1')
+  })
+
+  it('rejects the root-named CLI app on a stale shared version', () => {
+    expect(checkDshFamilyVersion(
+      { name: '@deepseek-ai/dsh', version: '0.1.2-alpha.5' },
+      '0.1.2-rc.1',
+    )).toBe('@deepseek-ai/dsh: package.json version must match root version 0.1.2-rc.1')
+  })
+
+  it('accepts a manifest carrying the shared version', () => {
+    expect(checkDshFamilyVersion(
+      { name: '@deepseek-ai/dsh-http-proxy', version: '0.1.2-rc.1' },
+      '0.1.2-rc.1',
+    )).toBeUndefined()
+  })
+
+  it('leaves other sequences to their own version lines', () => {
+    expect(checkDshFamilyVersion({ name: '@deepseek-ai/cordis', version: '4.0.1' }, '0.1.2-rc.1')).toBeUndefined()
+    expect(checkDshFamilyVersion(
+      { name: '@deepseek-ai/node-addon-landlock-run', version: '0.1.1' },
+      '0.1.2-rc.1',
+    )).toBeUndefined()
+    expect(checkDshFamilyVersion({ version: '0.1.2-alpha.5' }, '0.1.2-rc.1')).toBeUndefined()
+  })
+})
+
 describe('package payload constraints', () => {
   it('keeps the GitHub desktop app out of the npm release-member policy', () => {
     expect(checkWorkspaceManifest({
       dir: 'apps/desktop',
-      manifest: { name: '@deepseek-ai/dsh-desktop', private: true },
+      manifest: { name: '@deepseek-ai/dsh-desktop', version: '0.1.3-alpha.1', private: true },
     })).toEqual([])
   })
 
