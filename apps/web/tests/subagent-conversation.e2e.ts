@@ -563,10 +563,12 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
       .click()
     await currentSubagentButton(page, 3).hover()
     await page.getByRole('treeitem', { name: new RegExp(LABEL) }).click()
-    await page.locator('[data-agent-current]').getByRole('textbox', { name: 'Message or run a task... / commands, @ files or sessions' }).waitFor()
+    const childPane = agentTile(page, childId)
+    await expect.poll(() => childPane.getAttribute('data-agent-current')).toBe('true')
+    await childPane.getByRole('textbox', { name: 'Message or run a task... / commands, @ files or sessions' }).waitFor()
     const forkResponse = page.waitForResponse(response =>
       new URL(response.url()).pathname === '/api/session/fork')
-    await page.getByRole('button', { name: 'Branch into a new conversation' }).last().click()
+    await childPane.getByRole('button', { name: 'Branch into a new conversation' }).click()
     const forkReceipt = await (await forkResponse).json() as { result: { ok: boolean } }
     expect(forkReceipt.result).toMatchObject({ ok: true })
     await expect.poll(
@@ -600,7 +602,7 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
 
     const forkResponse = page.waitForResponse(response =>
       new URL(response.url()).pathname === '/api/session/fork')
-    await page.getByRole('button', { name: 'Branch into a new conversation' }).last().click()
+    await childPane.getByRole('button', { name: 'Branch into a new conversation' }).click()
     const forkReceipt = await (await forkResponse).json() as {
       result: { ok: true; value: { sessionId: string } } | { ok: false }
     }
