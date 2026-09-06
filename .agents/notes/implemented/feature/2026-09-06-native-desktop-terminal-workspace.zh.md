@@ -1,8 +1,8 @@
 # Agent Note: 原生桌面终端工作区
 
-[English](2026-09-06-native-desktop-terminal-workspace.md) | 中文
-
 Status: implemented
+
+[English](2026-09-06-native-desktop-terminal-workspace.md) | 中文
 
 ## Problem
 
