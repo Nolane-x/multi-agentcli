@@ -67,12 +67,15 @@ describe('desktop native terminal workspace', () => {
     if (!opened.ok) throw new Error(opened.error.message)
 
     expect(opened.value.terminalId).toBe('native-1')
-    expect(tauri.invoke).toHaveBeenCalledWith('desktop_terminal_open', expect.objectContaining({
+    const openCall = tauri.invoke.mock.calls.find(([command]) => command === 'desktop_terminal_open')
+    expect(openCall).toBeDefined()
+    const openArgs = openCall?.[1]
+    expect(openArgs).toMatchObject({
       cwd: '/workspace/project',
       rows: 24,
       cols: 80,
-      onEvent: expect.any(FakeChannel),
-    }))
+    })
+    expect(openArgs?.onEvent).toBeInstanceOf(FakeChannel)
 
     const iterator = workspace.terminal.output(
       'desktop-workspace' as SessionId,
