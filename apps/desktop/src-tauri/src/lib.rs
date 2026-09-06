@@ -91,6 +91,51 @@ fn resolve_cwd(cwd: Option<String>) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+fn decode_terminal_utf8(pending: &mut Vec<u8>, bytes: &[u8], flush: bool) -> Vec<String> {
+    pending.extend_from_slice(bytes);
+    let mut output = Vec::new();
+
+    loop {
+        match std::str::from_utf8(pending.as_slice()) {
+            Ok(text) => {
+                if !text.is_empty() {
+                    output.push(text.to_owned());
+                }
+                pending.clear();
+                break;
+            }
+            Err(error) => {
+                let valid_up_to = error.valid_up_to();
+                if valid_up_to > 0 {
+                    let text = std::str::from_utf8(&pending[..valid_up_to])
+                        .expect("Utf8Error::valid_up_to must delimit valid UTF-8")
+                        .to_owned();
+                    output.push(text);
+                    pending.drain(..valid_up_to);
+                    continue;
+                }
+
+                if let Some(error_len) = error.error_len() {
+                    output.push(String::from_utf8_lossy(&pending[..error_len]).into_owned());
+                    pending.drain(..error_len);
+                    continue;
+                }
+
+                if flush {
+                    let tail = String::from_utf8_lossy(pending.as_slice()).into_owned();
+                    if !tail.is_empty() {
+                        output.push(tail);
+                    }
+                    pending.clear();
+                }
+                break;
+            }
+        }
+    }
+
+    output
+}
+
 fn close_terminal(mut terminal: DesktopTerminal) -> Result<(), String> {
     let kill_error = (terminal.killer)().err();
     drop(terminal.writer);
@@ -192,17 +237,24 @@ fn desktop_terminal_open(
     let output_channel = on_event.clone();
     let reader_thread = thread::spawn(move || {
         let mut buffer = [0_u8; 8192];
+        let mut pending_utf8 = Vec::new();
         loop {
             match reader.read(&mut buffer) {
                 Ok(0) => break,
                 Ok(size) => {
-                    let text = String::from_utf8_lossy(&buffer[..size]).into_owned();
-                    if output_channel.send(NativeTerminalEvent::Output(text)).is_err() {
-                        return;
+                    for text in decode_terminal_utf8(&mut pending_utf8, &buffer[..size], false) {
+                        if output_channel.send(NativeTerminalEvent::Output(text)).is_err() {
+                            return;
+                        }
                     }
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(_) => break,
+            }
+        }
+        for text in decode_terminal_utf8(&mut pending_utf8, &[], true) {
+            if output_channel.send(NativeTerminalEvent::Output(text)).is_err() {
+                return;
             }
         }
         let _ = output_channel.send(NativeTerminalEvent::Eof);
@@ -312,6 +364,25 @@ fn desktop_terminal_close(
 mod tests {
     use super::*;
     use std::{sync::mpsc, time::Duration};
+
+    #[test]
+    fn terminal_utf8_decoder_preserves_split_codepoints() {
+        let expected = "Việt界🙂";
+        let mut pending = Vec::new();
+        let mut decoded = String::new();
+
+        for byte in expected.as_bytes() {
+            for text in decode_terminal_utf8(&mut pending, std::slice::from_ref(byte), false) {
+                decoded.push_str(&text);
+            }
+        }
+        for text in decode_terminal_utf8(&mut pending, &[], true) {
+            decoded.push_str(&text);
+        }
+
+        assert_eq!(decoded, expected);
+        assert!(pending.is_empty());
+    }
 
     #[test]
     fn native_pty_round_trip_preserves_executed_output() {
