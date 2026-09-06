@@ -314,7 +314,9 @@ mod tests {
     use std::{sync::mpsc, time::Duration};
 
     #[test]
-    fn native_pty_round_trip_preserves_marker() {
+    fn native_pty_round_trip_preserves_executed_output() {
+        const EXPECTED_MARKER: &str = "DSH_PTY_SMOKE_OUTPUT";
+
         let pty_system = native_pty_system();
         let pair = pty_system
             .openpty(PtySize {
@@ -325,7 +327,8 @@ mod tests {
             })
             .expect("native PTY allocation should succeed");
 
-        let command = CommandBuilder::new_default_prog();
+        let mut command = CommandBuilder::new_default_prog();
+        command.env("DSH_PTY_SMOKE_VALUE", EXPECTED_MARKER);
         let mut child = pair
             .slave
             .spawn_command(command)
@@ -348,8 +351,13 @@ mod tests {
             let _ = sender.send(result);
         });
 
+        #[cfg(windows)]
+        let smoke_command = b"echo %DSH_PTY_SMOKE_VALUE%\rexit\r";
+        #[cfg(not(windows))]
+        let smoke_command = b"printf '%s\\n' \"$DSH_PTY_SMOKE_VALUE\"\rexit\r";
+
         writer
-            .write_all(b"echo DSH_PTY_SMOKE\rexit\r")
+            .write_all(smoke_command)
             .expect("native PTY should accept shell input");
         writer.flush().expect("native PTY input should flush");
         drop(writer);
@@ -377,8 +385,8 @@ mod tests {
 
         let text = String::from_utf8_lossy(&output);
         assert!(
-            text.contains("DSH_PTY_SMOKE"),
-            "native PTY round trip lost marker; output: {text:?}"
+            text.contains(EXPECTED_MARKER),
+            "native PTY round trip lost executed marker; output: {text:?}"
         );
     }
 }
