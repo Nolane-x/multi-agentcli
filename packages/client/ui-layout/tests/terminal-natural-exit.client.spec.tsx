@@ -29,6 +29,32 @@ function translate(key: string): string {
   return messages[key] ?? key
 }
 
+function terminalClient(outputDone: Promise<void>, close = vi.fn(async () => ({ ok: true as const, value: { closed: true } }))): TerminalSessionClient {
+  return {
+    backends: vi.fn(async () => ({ ok: true as const, value: { items: [DESKTOP_TERMINAL_BACKEND] } })),
+    list: vi.fn(async () => ({ ok: true as const, value: { items: [] } })),
+    open: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        terminalId: 'native-1',
+        type: DESKTOP_TERMINAL_BACKEND,
+        status: { kind: 'running' as const },
+        motd: '',
+      },
+    })),
+    output: vi.fn(async function* () {
+      await outputDone
+    }),
+    write: vi.fn(async () => ({ ok: true as const, value: undefined })),
+    resize: vi.fn(async () => ({ ok: true as const, value: undefined })),
+    signal: vi.fn(async () => ({
+      ok: true as const,
+      value: { delivered: true as const, targetPgid: 0 },
+    })),
+    close,
+  }
+}
+
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
@@ -39,29 +65,7 @@ describe('TerminalPane natural exit lifecycle', () => {
     const exited = deferred()
     const sessionId = 'desktop-terminal-workspace' as SessionId
     const close = vi.fn(async () => ({ ok: true as const, value: { closed: true } }))
-    const terminal: TerminalSessionClient = {
-      backends: vi.fn(async () => ({ ok: true as const, value: { items: [DESKTOP_TERMINAL_BACKEND] } })),
-      list: vi.fn(async () => ({ ok: true as const, value: { items: [] } })),
-      open: vi.fn(async () => ({
-        ok: true as const,
-        value: {
-          terminalId: 'native-1',
-          type: DESKTOP_TERMINAL_BACKEND,
-          status: { kind: 'running' as const },
-          motd: '',
-        },
-      })),
-      output: vi.fn(async function* () {
-        await exited.promise
-      }),
-      write: vi.fn(async () => ({ ok: true as const, value: undefined })),
-      resize: vi.fn(async () => ({ ok: true as const, value: undefined })),
-      signal: vi.fn(async () => ({
-        ok: true as const,
-        value: { delivered: true as const, targetPgid: 0 },
-      })),
-      close,
-    }
+    const terminal = terminalClient(exited.promise, close)
     const onClosed = vi.fn()
 
     const view = render(
@@ -83,6 +87,49 @@ describe('TerminalPane natural exit lifecycle', () => {
     await waitFor(() => {
       expect(close).toHaveBeenCalledWith(sessionId, 'native-1')
       expect(onClosed).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('does not restart a live PTY when the onClosed callback identity changes', async () => {
+    const exited = deferred()
+    const sessionId = 'desktop-terminal-workspace' as SessionId
+    const terminal = terminalClient(exited.promise)
+    const firstOnClosed = vi.fn()
+    const secondOnClosed = vi.fn()
+
+    const view = render(
+      <TerminalPane
+        sessionId={sessionId}
+        terminal={terminal}
+        backend={DESKTOP_TERMINAL_BACKEND}
+        t={translate as never}
+        onClosed={firstOnClosed}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(terminal.open).toHaveBeenCalledTimes(1)
+      expect(view.container.querySelector('[data-terminal-phase="running"]')).not.toBeNull()
+    })
+
+    view.rerender(
+      <TerminalPane
+        sessionId={sessionId}
+        terminal={terminal}
+        backend={DESKTOP_TERMINAL_BACKEND}
+        t={translate as never}
+        onClosed={secondOnClosed}
+      />,
+    )
+
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(terminal.open).toHaveBeenCalledTimes(1)
+
+    exited.resolve()
+    await waitFor(() => {
+      expect(secondOnClosed).toHaveBeenCalledTimes(1)
+      expect(firstOnClosed).not.toHaveBeenCalled()
     })
   })
 })
