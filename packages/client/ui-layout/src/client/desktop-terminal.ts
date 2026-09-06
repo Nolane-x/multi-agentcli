@@ -112,8 +112,8 @@ export function createDesktopTerminalWorkspace(): DesktopTerminalWorkspace | und
   const entries = new Map<string, NativeTerminalEntry>()
 
   const terminal = {
-    backends: async () => ({ ok: true as const, value: { items: [DESKTOP_TERMINAL_BACKEND] } }),
-    list: async (_sessionId: SessionId) => ({
+    backends: () => Promise.resolve({ ok: true as const, value: { items: [DESKTOP_TERMINAL_BACKEND] } }),
+    list: (_sessionId: SessionId) => Promise.resolve({
       ok: true as const,
       value: {
         items: [...entries].map(([terminalId, entry]): TerminalRemoteItem => ({
