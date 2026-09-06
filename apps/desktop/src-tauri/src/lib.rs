@@ -105,10 +105,13 @@ fn close_terminal(mut terminal: DesktopTerminal) -> Result<(), String> {
     waiter?;
     reader?;
     if let Some(error) = kill_error {
-        // A shell that exited on its own may reject a later kill. It is already
-        // reaped by the waiter thread, so this is not a cleanup failure.
-        if error.kind() != std::io::ErrorKind::InvalidInput {
-            return Ok(());
+        // A shell that already exited can reject the cleanup signal. The waiter
+        // has reaped it by this point, so only that expected race is ignored.
+        if !matches!(
+            error.kind(),
+            std::io::ErrorKind::InvalidInput | std::io::ErrorKind::NotFound
+        ) {
+            return Err(format!("failed to terminate native terminal: {error}"));
         }
     }
     Ok(())
