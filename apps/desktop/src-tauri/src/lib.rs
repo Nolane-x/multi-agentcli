@@ -446,7 +446,7 @@ mod tests {
         });
 
         #[cfg(windows)]
-        let smoke_command = b"echo %DSH_PTY_SMOKE_VALUE%\r";
+        let smoke_command = b"echo %DSH_PTY_SMOKE_VALUE%\r\n";
         #[cfg(not(windows))]
         let smoke_command = b"printf '%s\\n' \"$DSH_PTY_SMOKE_VALUE\"\r";
 
