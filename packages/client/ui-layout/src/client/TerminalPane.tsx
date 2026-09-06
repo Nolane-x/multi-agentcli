@@ -81,10 +81,15 @@ export function TerminalPane(props: TerminalPaneProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const terminalIdRef = useRef<string>()
   const closeSentRef = useRef(false)
+  const onClosedRef = useRef(props.onClosed)
   const [snapshot, setSnapshot] = useState<TerminalScreenSnapshot>(() => screenRef.current.snapshot())
   const [terminalId, setTerminalId] = useState<string>()
   const [phase, setPhase] = useState<TerminalPhase>('opening')
   const [error, setError] = useState<string>()
+
+  useEffect(() => {
+    onClosedRef.current = props.onClosed
+  }, [props.onClosed])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -130,7 +135,7 @@ export function TerminalPane(props: TerminalPaneProps) {
       terminalIdRef.current = undefined
       setTerminalId(undefined)
       setPhase('closed')
-      props.onClosed?.()
+      onClosedRef.current?.()
     })().catch((cause: unknown) => {
       if (!lifecycle.active || controller.signal.aborted) return
       setError(errorMessage(cause))
@@ -148,7 +153,7 @@ export function TerminalPane(props: TerminalPaneProps) {
         })
       }
     }
-  }, [props.backend, props.cwd, props.sessionId, props.terminal, props.onClosed])
+  }, [props.backend, props.cwd, props.sessionId, props.terminal])
 
   const write = useCallback((data: string) => {
     if (terminalId === undefined || phase !== 'running') return
@@ -184,14 +189,15 @@ export function TerminalPane(props: TerminalPaneProps) {
         return
       }
       terminalIdRef.current = undefined
+      setTerminalId(undefined)
       setPhase('closed')
-      props.onClosed?.()
+      onClosedRef.current?.()
     }).catch((cause: unknown) => {
       closeSentRef.current = false
       setError(errorMessage(cause))
       setPhase('error')
     })
-  }, [props.onClosed, props.sessionId, props.terminal])
+  }, [props.sessionId, props.terminal])
 
   const stop = useCallback(() => {
     if (terminalId === undefined || phase !== 'running') return
