@@ -566,9 +566,11 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     const childPane = agentTile(page, childId)
     await expect.poll(() => childPane.getAttribute('data-agent-current')).toBe('true')
     await childPane.getByRole('textbox', { name: 'Message or run a task... / commands, @ files or sessions' }).waitFor()
+    const branch = childPane.locator('button[aria-label="Branch into a new conversation"]:not([aria-disabled="true"])')
+    await expect.poll(() => branch.count()).toBe(1)
     const forkResponse = page.waitForResponse(response =>
       new URL(response.url()).pathname === '/api/session/fork')
-    await childPane.getByRole('button', { name: 'Branch into a new conversation' }).click()
+    await branch.click()
     const forkReceipt = await (await forkResponse).json() as { result: { ok: boolean } }
     expect(forkReceipt.result).toMatchObject({ ok: true })
     await expect.poll(
@@ -599,10 +601,12 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     await expect.poll(() => childPane.getAttribute('data-agent-current')).toBe('true')
     await childPane.locator('[data-composer-input][contenteditable="true"]').waitFor()
     expect(scaffold.ctx.agents.get(childId)).toBeUndefined()
+    const branch = childPane.locator('button[aria-label="Branch into a new conversation"]:not([aria-disabled="true"])')
+    await expect.poll(() => branch.count()).toBe(1)
 
     const forkResponse = page.waitForResponse(response =>
       new URL(response.url()).pathname === '/api/session/fork')
-    await childPane.getByRole('button', { name: 'Branch into a new conversation' }).click()
+    await branch.click()
     const forkReceipt = await (await forkResponse).json() as {
       result: { ok: true; value: { sessionId: string } } | { ok: false }
     }

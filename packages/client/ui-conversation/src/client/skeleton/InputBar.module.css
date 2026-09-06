@@ -241,6 +241,10 @@
    Read-only; the chip gap widened to 12 so the pill chips read as separate
    controls. */
 .tools {
+  /* Preserve the group's intrinsic width so the row wraps its trailing model
+     controls instead of shrinking this group until its mode chip overlaps
+     the model trigger. */
+  flex: none;
   gap: 16px;
 }
 
