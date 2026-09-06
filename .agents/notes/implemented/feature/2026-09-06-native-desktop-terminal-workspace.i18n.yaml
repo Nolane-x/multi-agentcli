@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-06-native-desktop-terminal-workspace.md
-2026-09-06-native-desktop-terminal-workspace.md: ee110b3621059a565bdc286dbba8c869f01a90af
-2026-09-06-native-desktop-terminal-workspace.zh.md: 8d0df09093c5d846c45432e45ac7722e9a29a81d
+2026-09-06-native-desktop-terminal-workspace.md: 094197e1defda7f671d2fc3b2c60164c0f72fa02
+2026-09-06-native-desktop-terminal-workspace.zh.md: 8a26fce02661d3bdca9b5dab7bd3fb7f143891f1
