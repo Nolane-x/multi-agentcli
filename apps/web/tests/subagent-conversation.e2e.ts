@@ -593,7 +593,9 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     await sessions.getByRole('treeitem', { name: /Ask a research subagent to/ }).click()
     await currentSubagentButton(page, 3).hover()
     await page.getByRole('treeitem', { name: new RegExp(LABEL) }).click()
-    await currentAgent(page).locator('[data-composer-input][contenteditable="true"]').waitFor()
+    const childPane = agentTile(page, childId)
+    await expect.poll(() => childPane.getAttribute('data-agent-current')).toBe('true')
+    await childPane.locator('[data-composer-input][contenteditable="true"]').waitFor()
     expect(scaffold.ctx.agents.get(childId)).toBeUndefined()
 
     const forkResponse = page.waitForResponse(response =>
@@ -610,7 +612,8 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     await sessions.getByRole('treeitem', { name: /Ask a research subagent to/ }).click()
     await currentSubagentButton(page, 3).press('ArrowDown')
     await page.getByRole('treeitem', { name: new RegExp(LABEL) }).click()
-    const input = currentAgent(page).locator('[data-composer-input][contenteditable="true"]')
+    await expect.poll(() => childPane.getAttribute('data-agent-current')).toBe('true')
+    const input = childPane.locator('[data-composer-input][contenteditable="true"]')
     await input.waitFor()
     const promptResponse = page.waitForResponse(response =>
       new URL(response.url()).pathname === '/api/subagents/prompt')
