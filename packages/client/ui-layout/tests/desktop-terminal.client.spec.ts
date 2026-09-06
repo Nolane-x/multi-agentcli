@@ -7,7 +7,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-layout/src/client/desktop-terminal.ts'
 
 interface NativeTerminalEvent {
-  readonly event: 'output' | 'exited'
+  readonly event: 'output' | 'exited' | 'eof'
   readonly data?: string
 }
 
@@ -55,7 +55,7 @@ describe('desktop native terminal workspace', () => {
     expect(createDesktopTerminalWorkspace()).toBeUndefined()
   })
 
-  it('opens a native terminal without a live Harness Session and streams its channel output', async () => {
+  it('opens a native terminal without a live Harness Session and drains PTY output after process exit', async () => {
     const tauri = installTauri()
     const workspace = createDesktopTerminalWorkspace()
     if (workspace === undefined) throw new Error('desktop workspace was not detected')
@@ -78,10 +78,17 @@ describe('desktop native terminal workspace', () => {
       'desktop-workspace' as SessionId,
       opened.value.terminalId,
     )[Symbol.asyncIterator]()
-    const next = iterator.next()
+    const first = iterator.next()
     tauri.emit({ event: 'output', data: '\u001b[32magent$\u001b[0m ' })
-    await expect(next).resolves.toEqual({ done: false, value: { data: '\u001b[32magent$\u001b[0m ' } })
+    await expect(first).resolves.toEqual({ done: false, value: { data: '\u001b[32magent$\u001b[0m ' } })
+
+    // Process exit and PTY EOF are separate events: buffered bytes may still
+    // arrive after wait() reports exit, and must not be truncated.
     tauri.emit({ event: 'exited' })
+    const tail = iterator.next()
+    tauri.emit({ event: 'output', data: 'final result\r\n' })
+    await expect(tail).resolves.toEqual({ done: false, value: { data: 'final result\r\n' } })
+    tauri.emit({ event: 'eof' })
     await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined })
   })
 
