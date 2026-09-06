@@ -79,8 +79,13 @@ async function* readOutput(
   signal?: AbortSignal,
 ): AsyncIterable<TerminalOutputFrame> {
   const reader = entry.stream.getReader()
-  const abort = (): void => { void reader.cancel() }
+  const abort = (): void => {
+    if (entry.closed) return
+    entry.closed = true
+    void reader.cancel()
+  }
   signal?.addEventListener('abort', abort, { once: true })
+  if (signal?.aborted === true) abort()
   try {
     while (signal?.aborted !== true) {
       const next = await reader.read()
