@@ -1,8 +1,8 @@
 # Agent Note: Native desktop terminal workspace
 
-English | [中文](2026-09-06-native-desktop-terminal-workspace.zh.md)
-
 Status: implemented
+
+English | [中文](2026-09-06-native-desktop-terminal-workspace.zh.md)
 
 ## Problem
 
