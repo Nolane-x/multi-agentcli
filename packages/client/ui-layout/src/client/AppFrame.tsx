@@ -8,7 +8,9 @@
  * agent tiles. Production receives a renderer-native SessionScope capability
  * that pins each conversation occurrence to its own Harness Session binding.
  * Active one-shot subagent jobs join the same mosaic as lifecycle-only cards;
- * they never fabricate a Session transcript or renderer scope.
+ * they never fabricate a Session transcript or renderer scope. The desktop
+ * shell may additionally project native PTYs that intentionally have no
+ * Harness Session owner.
  */
 import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
@@ -19,6 +21,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TerminalSessionClient } from '@deepseek-ai/dsh-api-session-controller/client'
 import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
+import { DESKTOP_TERMINAL_BACKEND } from './desktop-terminal.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import { TerminalPane } from './TerminalPane.tsx'
 import {
@@ -35,6 +38,8 @@ interface SessionScopeProps {
 
 type SessionScopeComponent = (props: SessionScopeProps) => ReactNode
 
+type TerminalMode = 'session' | 'desktop'
+
 interface SpatialAgentActions {
   /** Renderer-native provider used to pin one subtree to an explicit Session. */
   SessionScope?: SessionScopeComponent
@@ -44,14 +49,23 @@ interface SpatialAgentActions {
   stageAgent?: (sessionId: SessionIdOf) => void
   /** Request cancellation of an owner-fenced one-shot background job. */
   stopAgentJob?: (ownerId: SessionIdOf, jobId: string) => Promise<boolean>
-  /** Owner-addressed PTY capability supplied by the Session Controller. */
+  /** PTY capability: Session-owned in Harness, ownerless native PTY in desktop mode. */
   terminal?: TerminalSessionClient
+  /** Selects whether terminal cards require a live Harness Session owner. */
+  terminalMode?: TerminalMode
+  /** Resolve the desktop terminal workspace's initial working directory. */
+  terminalDefaultCwd?: () => Promise<string>
+  /** Open the desktop-native directory picker for terminals created afterward. */
+  pickTerminalCwd?: () => Promise<string | undefined>
 }
 
 interface SpatialTerminalCard {
   readonly key: string
-  readonly ownerId: SessionIdOf
+  readonly ownerId?: SessionIdOf
+  readonly cwd?: string
 }
+
+const DESKTOP_TERMINAL_SESSION = 'desktop-terminal-workspace' as SessionIdOf
 
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
@@ -332,6 +346,9 @@ export function AppFrame({
   stageAgent,
   stopAgentJob,
   terminal,
+  terminalMode = 'session',
+  terminalDefaultCwd,
+  pickTerminalCwd,
   t,
 }: AppFrameProps) {
   const panels = useStore(s => s)
@@ -365,35 +382,69 @@ export function AppFrame({
     [activeAgentIds, jobsBySession],
   )
   const [focusedAgent, setFocusedAgent] = useState<SessionIdOf | undefined>()
+  const [focusedTerminal, setFocusedTerminal] = useState<string | undefined>()
   const [stopRequestedJobs, setStopRequestedJobs] = useState<Set<string>>(() => new Set())
   const [terminalCards, setTerminalCards] = useState<SpatialTerminalCard[]>(() => [])
+  const [terminalCwd, setTerminalCwd] = useState<string | undefined>()
   const terminalSequence = useRef(0)
-  const focusedVisible = focusedAgent !== undefined && activeAgentIds.includes(focusedAgent)
-  const displayedAgentIds = focusedVisible ? [focusedAgent] : activeAgentIds
-  const displayedSubagentJobs = focusedVisible ? [] : activeSubagentJobs
-  const displayedTerminalCards = terminal === undefined || focusedVisible ? [] : terminalCards
+  const focusedAgentVisible = focusedAgent !== undefined && activeAgentIds.includes(focusedAgent)
+  const focusedTerminalVisible = focusedTerminal !== undefined && terminalCards.some(card => card.key === focusedTerminal)
+  const anyFocused = focusedAgentVisible || focusedTerminalVisible
+  const displayedAgentIds = focusedTerminalVisible ? [] : focusedAgentVisible ? [focusedAgent] : activeAgentIds
+  const displayedSubagentJobs = anyFocused ? [] : activeSubagentJobs
+  const displayedTerminalCards = terminal === undefined || focusedAgentVisible
+    ? []
+    : focusedTerminalVisible
+      ? terminalCards.filter(card => card.key === focusedTerminal)
+      : terminalCards
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
   const stagedAgents = useRef(new Set<SessionIdOf>())
 
+  useEffect(() => {
+    if (terminalMode !== 'desktop' || terminalDefaultCwd === undefined) return
+    let active = true
+    void terminalDefaultCwd().then((cwd) => {
+      if (active) setTerminalCwd(previous => previous ?? cwd)
+    }).catch(() => undefined)
+    return () => { active = false }
+  }, [terminalDefaultCwd, terminalMode])
+
+  const chooseTerminalCwd = useCallback(() => {
+    if (pickTerminalCwd === undefined) return
+    void pickTerminalCwd().then((cwd) => {
+      if (cwd !== undefined) setTerminalCwd(cwd)
+    }).catch(() => undefined)
+  }, [pickTerminalCwd])
+
   const createTerminal = useCallback(() => {
-    if (terminal === undefined || currentSession === undefined) return
+    if (terminal === undefined) return
     terminalSequence.current += 1
     const key = `terminal-${terminalSequence.current}`
+    if (terminalMode === 'desktop') {
+      setTerminalCards(previous => [
+        ...previous,
+        { key, ...(terminalCwd === undefined ? {} : { cwd: terminalCwd }) },
+      ])
+      return
+    }
+    if (currentSession === undefined) return
     setTerminalCards(previous => [...previous, { key, ownerId: currentSession }])
-  }, [currentSession, terminal])
+  }, [currentSession, terminal, terminalCwd, terminalMode])
 
   const closeTerminal = useCallback((key: string) => {
     setTerminalCards(previous => previous.filter(card => card.key !== key))
+    setFocusedTerminal(value => value === key ? undefined : value)
   }, [])
 
   useEffect(() => {
+    if (terminalMode === 'desktop') return
     const live = new Set(activeAgentIds)
     setTerminalCards((previous) => {
-      const next = previous.filter(card => live.has(card.ownerId))
+      const next = previous.filter(card => card.ownerId !== undefined && live.has(card.ownerId))
       return next.length === previous.length ? previous : next
     })
-  }, [activeAgentIds])
+  }, [activeAgentIds, terminalMode])
 
   const requestJobStop = useCallback((ownerId: SessionIdOf, jobId: string) => {
     if (stopAgentJob === undefined) return
@@ -459,13 +510,21 @@ export function AppFrame({
   }, [activeAgentIds, focusedAgent])
 
   useEffect(() => {
-    if (focusedAgent === undefined) return
+    if (focusedTerminal !== undefined && !terminalCards.some(card => card.key === focusedTerminal)) {
+      setFocusedTerminal(undefined)
+    }
+  }, [focusedTerminal, terminalCards])
+
+  useEffect(() => {
+    if (!anyFocused) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setFocusedAgent(undefined)
+      if (event.key !== 'Escape') return
+      setFocusedAgent(undefined)
+      setFocusedTerminal(undefined)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => { window.removeEventListener('keydown', onKeyDown) }
-  }, [focusedAgent])
+  }, [anyFocused])
 
   const lastSession = useRef(detailsSession)
   useLayoutEffect(() => {
@@ -523,15 +582,14 @@ export function AppFrame({
 
   const productTitle = process.env.DSH_CLIENT_TITLE ?? t('brand.localBuild')
   const visibleTileCount = displayedAgentIds.length + displayedSubagentJobs.length + displayedTerminalCards.length
-  const dimension = focusedVisible ? 1 : mosaicDimension(visibleTileCount)
-  const cellPercent = focusedVisible ? 100 : mosaicCellPercent(visibleTileCount)
-  const gap = focusedVisible ? 0 : 12
+  const dimension = anyFocused ? 1 : mosaicDimension(visibleTileCount)
+  const cellPercent = anyFocused ? 100 : mosaicCellPercent(visibleTileCount)
+  const gap = anyFocused ? 0 : 12
   const gapShare = gap * (dimension - 1) / dimension
   // Preserve the single-agent Harness surface until there is another visible
-  // tile. The spatial shell becomes a mosaic as soon as a second agent, job,
-  // or terminal is present; the first agent keeps the existing full-page
-  // interaction geometry and accessibility tree.
-  const mosaicVisible = focusedVisible || visibleTileCount > 1
+  // tile. Desktop terminal cards are different: even a single terminal enters
+  // the spatial grid so 1–4 terminals retain quarter-screen geometry.
+  const mosaicVisible = anyFocused || displayedTerminalCards.length > 0 || visibleTileCount > 1
   const currentConversation = !mosaicVisible || currentSession === undefined || SessionScope === undefined
     ? renderSlot('conversation', {})
     : (
@@ -555,7 +613,8 @@ export function AppFrame({
       data-sidebar-collapsed={sidebarCollapsed || undefined}
       data-details-collapsed={cols.details === 0 || undefined}
       data-dragging={dragging || undefined}
-      data-agent-focus={focusedVisible || undefined}
+      data-agent-focus={focusedAgentVisible || undefined}
+      data-terminal-focus={focusedTerminalVisible || undefined}
     >
       <DocumentTitle
         productTitle={productTitle}
@@ -571,12 +630,26 @@ export function AppFrame({
         })}
         {terminal !== undefined && (
           <div className={css.railControls}>
+            {pickTerminalCwd !== undefined && (
+              <button
+                type="button"
+                className={css.terminalFolder}
+                aria-label={t('spatial.agent.pickTerminalFolder')}
+                title={terminalCwd === undefined
+                  ? t('spatial.agent.pickTerminalFolder')
+                  : t('spatial.agent.terminalFolder', { path: terminalCwd })}
+                onClick={chooseTerminalCwd}
+              >
+                <span aria-hidden="true">⌂</span>
+                <span>{t('spatial.agent.pickTerminalFolder')}</span>
+              </button>
+            )}
             <button
               type="button"
               className={css.createTerminal}
               aria-label={t('spatial.agent.createTerminal')}
               title={t('spatial.agent.createTerminal')}
-              disabled={currentSession === undefined}
+              disabled={terminalMode !== 'desktop' && currentSession === undefined}
               onClick={createTerminal}
             >
               <span aria-hidden="true">+</span>
@@ -595,7 +668,7 @@ export function AppFrame({
             {currentConversation}
           </div>
         ) : (
-          <div className={css.mosaic} data-focused={focusedVisible || undefined}>
+          <div className={css.mosaic} data-focused={anyFocused || undefined}>
             {displayedAgentIds.map((id) => {
               const summary = sessionsById[id]
               const current = id === currentSession
@@ -623,13 +696,16 @@ export function AppFrame({
                   {...summary?.cwd === undefined ? {} : { cwd: summary.cwd }}
                   running={summary?.running ?? false}
                   current={current}
-                  focused={focusedVisible && focusedAgent === id}
+                  focused={focusedAgentVisible && focusedAgent === id}
                   leader={lineage.rootId === id}
                   depth={lineage.depth}
                   {...lineage.parentId === undefined ? {} : { parentId: lineage.parentId }}
                   {...parentTitle === undefined ? {} : { parentTitle }}
                   style={tileStyle}
-                  onToggleFocus={() => { setFocusedAgent(value => value === id ? undefined : id) }}
+                  onToggleFocus={() => {
+                    setFocusedTerminal(undefined)
+                    setFocusedAgent(value => value === id ? undefined : id)
+                  }}
                   {...!current && openAgent !== undefined ? { onOpen: () => { openAgent(id) } } : {}}
                 >
                   {conversation}
@@ -655,21 +731,31 @@ export function AppFrame({
               )
             })}
             {terminal !== undefined && displayedTerminalCards.map((card) => {
-              const owner = sessionsById[card.ownerId]
+              const owner = card.ownerId === undefined ? undefined : sessionsById[card.ownerId]
+              const focused = focusedTerminalVisible && focusedTerminal === card.key
+              const terminalSession = card.ownerId ?? DESKTOP_TERMINAL_SESSION
+              const cwd = card.cwd ?? owner?.cwd
               return (
                 <section
                   key={card.key}
-                  className={`${css.agentTile} ${css.agentTileTerminal}`}
+                  className={`${css.agentTile} ${css.agentTileTerminal} ${focused ? css.agentTileFocused : ''}`}
                   style={tileStyle}
                   data-terminal-card-id={card.key}
-                  data-terminal-owner-id={card.ownerId}
-                  aria-label={`${t('spatial.agent.pane')} — ${owner?.displayTitle ?? String(card.ownerId)}`}
+                  data-terminal-owner-id={card.ownerId ?? 'desktop'}
+                  data-terminal-focused={focused || undefined}
+                  aria-label={`${t('spatial.agent.pane')} — ${owner?.displayTitle ?? cwd ?? 'desktop'}`}
                 >
                   <TerminalPane
-                    sessionId={card.ownerId}
+                    sessionId={terminalSession}
                     terminal={terminal}
                     t={t}
-                    {...owner?.cwd === undefined ? {} : { cwd: owner.cwd }}
+                    {...terminalMode === 'desktop' ? { backend: DESKTOP_TERMINAL_BACKEND } : {}}
+                    {...cwd === undefined ? {} : { cwd }}
+                    focused={focused}
+                    onToggleFocus={() => {
+                      setFocusedAgent(undefined)
+                      setFocusedTerminal(value => value === card.key ? undefined : card.key)
+                    }}
                     onClosed={() => { closeTerminal(card.key) }}
                   />
                 </section>
