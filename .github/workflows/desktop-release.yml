@@ -2,6 +2,14 @@ name: desktop release
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/desktop-release.yml'
+      - 'apps/desktop/**'
+      - 'packages/client/locale/**'
+      - 'packages/client/ui-layout/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   push:
     tags:
       - 'desktop-v*'
@@ -53,6 +61,7 @@ jobs:
           name: dsh-spatial-${{ runner.os }}
           path: |
             apps/desktop/src-tauri/target/release/bundle/**
+            apps/desktop/src-tauri/Cargo.lock
             !apps/desktop/src-tauri/target/release/bundle/**/*.sig
           if-no-files-found: error
 
