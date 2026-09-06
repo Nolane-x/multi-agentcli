@@ -70,7 +70,15 @@ function fakeTerminal(): TerminalSessionClient {
         motd: '',
       },
     })),
-    output: vi.fn(async function* () { return }),
+    output: vi.fn(async function* (_sessionId: SessionId, _terminalId: string, signal?: AbortSignal) {
+      await new Promise<void>((resolve) => {
+        if (signal?.aborted === true) {
+          resolve()
+          return
+        }
+        signal?.addEventListener('abort', () => { resolve() }, { once: true })
+      })
+    }),
     write: vi.fn(async () => ({ ok: true as const, value: undefined })),
     resize: vi.fn(async () => ({ ok: true as const, value: undefined })),
     signal: vi.fn(async () => ({ ok: true as const, value: { delivered: true as const, targetPgid: 0 } })),
