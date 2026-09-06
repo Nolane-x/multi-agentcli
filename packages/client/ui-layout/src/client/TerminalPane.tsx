@@ -128,7 +128,7 @@ export function TerminalPane(props: TerminalPaneProps) {
       closeSentRef.current = true
       const closed = await props.terminal.close(props.sessionId, opened.value.terminalId)
       if (isRemoteFailure(closed)) throw new Error(errorMessage(closed.error))
-      if (!isLifecycleActive(lifecycle) || controller.signal.aborted) return
+      if (!isLifecycleActive(lifecycle)) return
       terminalIdRef.current = undefined
       setTerminalId(undefined)
       setPhase('closed')
