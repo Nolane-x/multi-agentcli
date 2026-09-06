@@ -31,6 +31,11 @@ const emptySessions: SessionListState = {
   currentAddress: undefined,
 }
 
+function parameterText(value: unknown): string {
+  if (typeof value === 'string') return value
+  return JSON.stringify(value) ?? ''
+}
+
 function translate(key: string, params?: Record<string, unknown>): string {
   const messages: Record<string, string> = {
     'brand.localBuild': 'DSH Local Build',
@@ -53,23 +58,26 @@ function translate(key: string, params?: Record<string, unknown>): string {
   }
   return (messages[key] ?? key).replace(/\{(\w+)\}/gu, (_match, name: string) => {
     const value = params?.[name]
-    return value === undefined ? `{${name}}` : String(value)
+    return value === undefined ? `{${name}}` : parameterText(value)
   })
 }
 
-function fakeTerminal(): TerminalSessionClient {
-  return {
+type TerminalOpenRequest = Parameters<TerminalSessionClient['open']>[1]
+
+function fakeTerminal() {
+  const open = vi.fn(async (_sessionId: SessionId, request: TerminalOpenRequest) => ({
+    ok: true as const,
+    value: {
+      terminalId: 'native-1',
+      type: request.type,
+      status: { kind: 'running' as const },
+      motd: '',
+    },
+  }))
+  const terminal: TerminalSessionClient = {
     backends: vi.fn(async () => ({ ok: true as const, value: { items: [DESKTOP_TERMINAL_BACKEND] } })),
     list: vi.fn(async () => ({ ok: true as const, value: { items: [] } })),
-    open: vi.fn(async (_sessionId: SessionId, request) => ({
-      ok: true as const,
-      value: {
-        terminalId: 'native-1',
-        type: request.type,
-        status: { kind: 'running' as const },
-        motd: '',
-      },
-    })),
+    open,
     output: vi.fn(async function* (_sessionId: SessionId, _terminalId: string, signal?: AbortSignal) {
       await new Promise<void>((resolve) => {
         if (signal?.aborted === true) {
@@ -84,6 +92,7 @@ function fakeTerminal(): TerminalSessionClient {
     signal: vi.fn(async () => ({ ok: true as const, value: { delivered: true as const, targetPgid: 0 } })),
     close: vi.fn(async () => ({ ok: true as const, value: { closed: true } })),
   }
+  return { terminal, open }
 }
 
 type DesktopAppFrameProps = AppFrameProps & {
@@ -96,7 +105,7 @@ const DesktopAppFrame = AppFrame as unknown as (props: DesktopAppFrameProps) => 
 
 function mountDesktopFrame() {
   const store = createLayoutStore().create()
-  const terminal = fakeTerminal()
+  const { terminal, open } = fakeTerminal()
   const pickTerminalCwd = vi.fn(async () => '/workspace/picked')
   const terminalDefaultCwd = vi.fn(async () => '/workspace/default')
   const renderSlot = vi.fn((key: string) => {
@@ -124,7 +133,7 @@ function mountDesktopFrame() {
       t={translate}
     />,
   )
-  return { ...view, terminal, pickTerminalCwd, terminalDefaultCwd }
+  return { ...view, terminal, open, pickTerminalCwd, terminalDefaultCwd }
 }
 
 beforeEach(() => {
@@ -141,7 +150,7 @@ afterEach(() => {
 
 describe('desktop terminal-first workspace', () => {
   it('creates the first terminal with no Harness Session and keeps 2x2 sizing', async () => {
-    const { container, terminal, terminalDefaultCwd } = mountDesktopFrame()
+    const { container, open, terminalDefaultCwd } = mountDesktopFrame()
     const create = within(container).getByRole('button', { name: 'Create terminal' })
     expect((create as HTMLButtonElement).disabled).toBe(false)
     await waitFor(() => { expect(terminalDefaultCwd).toHaveBeenCalledTimes(1) })
@@ -156,7 +165,7 @@ describe('desktop terminal-first workspace', () => {
     expect(tile.style.flexBasis).toContain('50%')
     expect(tile.style.height).toContain('50%')
     await waitFor(() => {
-      expect(terminal.open).toHaveBeenCalledWith(
+      expect(open).toHaveBeenCalledWith(
         expect.any(String),
         { type: DESKTOP_TERMINAL_BACKEND, cwd: '/workspace/default' },
         expect.any(AbortSignal),
@@ -165,14 +174,14 @@ describe('desktop terminal-first workspace', () => {
   })
 
   it('uses a picked working directory for newly-created terminals', async () => {
-    const { container, pickTerminalCwd, terminal } = mountDesktopFrame()
+    const { container, pickTerminalCwd, open } = mountDesktopFrame()
     const pick = within(container).getByRole('button', { name: 'Choose terminal folder' })
     fireEvent.click(pick)
     await waitFor(() => { expect(pickTerminalCwd).toHaveBeenCalledTimes(1) })
     fireEvent.click(within(container).getByRole('button', { name: 'Create terminal' }))
 
     await waitFor(() => {
-      expect(terminal.open).toHaveBeenCalledWith(
+      expect(open).toHaveBeenCalledWith(
         expect.any(String),
         { type: DESKTOP_TERMINAL_BACKEND, cwd: '/workspace/picked' },
         expect.any(AbortSignal),
