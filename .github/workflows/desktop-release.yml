@@ -17,6 +17,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: desktop-release-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     name: ${{ matrix.os }}
@@ -51,6 +55,9 @@ jobs:
 
       - name: Install JavaScript dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Test native PTY
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib
 
       - name: Build desktop bundles
         run: pnpm --filter @deepseek-ai/dsh-desktop tauri build
