@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize, PtySystem};
+use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use std::{
     collections::HashMap,
@@ -16,6 +16,8 @@ use tauri::{ipc::Channel, AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 
 static NEXT_TERMINAL_ID: AtomicU64 = AtomicU64::new(1);
+
+type TerminalKiller = Box<dyn FnMut() -> std::io::Result<()> + Send>;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase", tag = "event", content = "data")]
@@ -35,7 +37,7 @@ struct NativeTerminalOpenValue {
 struct DesktopTerminal {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
-    killer: Box<dyn ChildKiller + Send + Sync>,
+    killer: TerminalKiller,
     reader_thread: JoinHandle<()>,
     waiter_thread: JoinHandle<()>,
 }
@@ -89,7 +91,7 @@ fn resolve_cwd(cwd: Option<String>) -> Result<PathBuf, String> {
 }
 
 fn close_terminal(mut terminal: DesktopTerminal) -> Result<(), String> {
-    let kill_error = terminal.killer.kill().err();
+    let kill_error = (terminal.killer)().err();
     drop(terminal.writer);
     drop(terminal.master);
 
@@ -117,6 +119,18 @@ fn close_terminal(mut terminal: DesktopTerminal) -> Result<(), String> {
     Ok(())
 }
 
+fn pick_terminal_cwd(app: &AppHandle) -> Result<Option<String>, String> {
+    let dialog = app.dialog().file();
+    let selected = dialog.blocking_pick_folder();
+    let Some(value) = selected else {
+        return Ok(None);
+    };
+    let path = value
+        .into_path()
+        .map_err(|error| format!("selected folder is not a local path: {error}"))?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
 #[tauri::command]
 fn desktop_terminal_default_cwd() -> String {
     default_cwd_path().to_string_lossy().into_owned()
@@ -124,15 +138,7 @@ fn desktop_terminal_default_cwd() -> String {
 
 #[tauri::command]
 async fn desktop_terminal_pick_cwd(app: AppHandle) -> Result<Option<String>, String> {
-    let selected = app.dialog().file().blocking_pick_folder();
-    selected
-        .map(|value| {
-            value
-                .into_path()
-                .map(|path| path.to_string_lossy().into_owned())
-                .map_err(|error| format!("selected folder is not a local path: {error}"))
-        })
-        .transpose()
+    pick_terminal_cwd(&app)
 }
 
 #[tauri::command]
@@ -179,7 +185,8 @@ fn desktop_terminal_open(
         .master
         .take_writer()
         .map_err(|error| format!("failed to open terminal writer: {error}"))?;
-    let killer = child.clone_killer();
+    let mut child_killer = child.clone_killer();
+    let killer: TerminalKiller = Box::new(move || child_killer.kill());
 
     let output_channel = on_event.clone();
     let reader_thread = thread::spawn(move || {
