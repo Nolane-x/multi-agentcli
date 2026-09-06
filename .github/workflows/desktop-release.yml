@@ -22,6 +22,23 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  lockfile:
+    name: cargo lockfile
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate Cargo lockfile
+        run: cargo generate-lockfile --manifest-path apps/desktop/src-tauri/Cargo.toml
+
+      - name: Upload generated Cargo lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-cargo-lock
+          path: apps/desktop/src-tauri/Cargo.lock
+          if-no-files-found: error
+
   build:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
