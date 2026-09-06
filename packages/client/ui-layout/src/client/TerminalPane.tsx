@@ -62,17 +62,14 @@ function isLifecycleActive(value: { readonly active: boolean }): boolean {
 }
 
 function FocusIcon({ focused }: { focused: boolean }) {
-  return focused
-    ? (
-      <svg viewBox="0 0 20 20" aria-hidden="true">
-        <path d="M7.2 3.5v3.7H3.5M12.8 3.5v3.7h3.7M7.2 16.5v-3.7H3.5M12.8 16.5v-3.7h3.7" />
-      </svg>
-    )
-    : (
-      <svg viewBox="0 0 20 20" aria-hidden="true">
-        <path d="M7.2 3.5H3.5v3.7M12.8 3.5h3.7v3.7M7.2 16.5H3.5v-3.7M12.8 16.5h3.7v-3.7" />
-      </svg>
-    )
+  const path = focused
+    ? 'M7.2 3.5v3.7H3.5M12.8 3.5v3.7h3.7M7.2 16.5v-3.7H3.5M12.8 16.5v-3.7h3.7'
+    : 'M7.2 3.5H3.5v3.7M12.8 3.5h3.7v3.7M7.2 16.5H3.5v-3.7M12.8 16.5h3.7v-3.7'
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <path d={path} />
+    </svg>
+  )
 }
 
 /** Render one live terminal addressed by {@link sessionId}. */
