@@ -143,7 +143,7 @@ describe('desktop terminal-first workspace', () => {
   it('creates the first terminal with no Harness Session and keeps 2x2 sizing', async () => {
     const { container, terminal, terminalDefaultCwd } = mountDesktopFrame()
     const create = within(container).getByRole('button', { name: 'Create terminal' })
-    expect(create).not.toBeDisabled()
+    expect((create as HTMLButtonElement).disabled).toBe(false)
     await waitFor(() => { expect(terminalDefaultCwd).toHaveBeenCalledTimes(1) })
 
     fireEvent.click(create)
