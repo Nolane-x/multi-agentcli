@@ -121,6 +121,16 @@ export function TerminalPane(props: TerminalPaneProps) {
         screenRef.current.write(frame.data)
         setSnapshot(screenRef.current.snapshot())
       }
+
+      if (!isLifecycleActive(lifecycle) || controller.signal.aborted || closeSentRef.current) return
+      closeSentRef.current = true
+      const closed = await props.terminal.close(props.sessionId, opened.value.terminalId)
+      if (isRemoteFailure(closed)) throw new Error(errorMessage(closed.error))
+      if (!isLifecycleActive(lifecycle) || controller.signal.aborted) return
+      terminalIdRef.current = undefined
+      setTerminalId(undefined)
+      setPhase('closed')
+      props.onClosed?.()
     })().catch((cause: unknown) => {
       if (!lifecycle.active || controller.signal.aborted) return
       setError(errorMessage(cause))
@@ -138,7 +148,7 @@ export function TerminalPane(props: TerminalPaneProps) {
         })
       }
     }
-  }, [props.backend, props.cwd, props.sessionId, props.terminal])
+  }, [props.backend, props.cwd, props.sessionId, props.terminal, props.onClosed])
 
   const write = useCallback((data: string) => {
     if (terminalId === undefined || phase !== 'running') return
