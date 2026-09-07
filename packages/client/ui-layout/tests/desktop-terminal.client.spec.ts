@@ -67,6 +67,15 @@ describe('desktop native terminal workspace', () => {
     expect(createDesktopTerminalWorkspace()).toBeUndefined()
   })
 
+  it('is absent when the browser global is unavailable', () => {
+    try {
+      vi.stubGlobal('window', undefined)
+      expect(createDesktopTerminalWorkspace()).toBeUndefined()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('opens a native terminal without a live Harness Session and drains PTY output after process exit', async () => {
     const tauri = installTauri()
     const workspace = createDesktopTerminalWorkspace()
