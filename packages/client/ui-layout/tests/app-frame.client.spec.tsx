@@ -168,7 +168,16 @@ describe('AppFrame', () => {
         ok: true as const,
         value: { terminalId: 'pty-integration', type: 'shell', status: { kind: 'running' as const }, motd: 'ready' },
       })),
-      output: vi.fn(async function* () { yield { data: 'agent$ ' } }),
+      output: vi.fn(async function* (_sessionId: SessionId, _terminalId: string, signal?: AbortSignal) {
+        yield { data: 'agent$ ' }
+        await new Promise<void>((resolve) => {
+          if (signal?.aborted === true) {
+            resolve()
+            return
+          }
+          signal?.addEventListener('abort', () => { resolve() }, { once: true })
+        })
+      }),
       write: vi.fn(async () => ({ ok: true as const, value: undefined })),
       resize: vi.fn(async () => ({ ok: true as const, value: undefined })),
       signal: vi.fn(async () => ({ ok: true as const, value: { delivered: true as const, targetPgid: 1 } })),
