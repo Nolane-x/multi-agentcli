@@ -414,6 +414,20 @@ mod tests {
             .master
             .take_writer()
             .expect("native PTY writer should open");
+
+        // portable-pty 0.9.0 enables PSEUDOCONSOLE_INHERIT_CURSOR on Windows.
+        // ConPTY asks the terminal host for its cursor position during startup;
+        // this headless smoke host must answer that DSR before cmd.exe can run.
+        #[cfg(windows)]
+        {
+            writer
+                .write_all(b"\x1b[1;1R")
+                .expect("native PTY should accept ConPTY cursor report");
+            writer
+                .flush()
+                .expect("native PTY cursor report should flush");
+        }
+
         let mut killer = child.clone_killer();
         let (sender, receiver) = mpsc::channel();
         let expected = EXPECTED_MARKER.as_bytes().to_vec();
