@@ -141,6 +141,28 @@ describe('desktop native terminal workspace', () => {
     expect(tauri.invoke).toHaveBeenCalledWith('desktop_terminal_close', { terminalId: 'native-1' })
   })
 
+  it('handles output whose abort signal is already aborted after EOF', async () => {
+    const tauri = installTauri()
+    const workspace = createDesktopTerminalWorkspace()
+    if (workspace === undefined) throw new Error('desktop workspace was not detected')
+
+    const opened = await workspace.terminal.open('desktop-workspace' as SessionId, {
+      type: DESKTOP_TERMINAL_BACKEND,
+    })
+    if (!opened.ok) throw new Error(opened.error.message)
+
+    tauri.emit({ event: 'eof' })
+    const abort = new AbortController()
+    abort.abort()
+    const iterator = workspace.terminal.output(
+      'desktop-workspace' as SessionId,
+      opened.value.terminalId,
+      abort.signal,
+    )[Symbol.asyncIterator]()
+
+    await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined })
+  })
+
   it('rejects unsupported and already-aborted terminal opens before invoking Tauri', async () => {
     const tauri = installTauri()
     const workspace = createDesktopTerminalWorkspace()
