@@ -204,6 +204,11 @@ describe('desktop native terminal workspace', () => {
     const workspace = createDesktopTerminalWorkspace()
     if (workspace === undefined) throw new Error('desktop workspace was not detected')
 
+    await expect(workspace.terminal.backends()).resolves.toEqual({
+      ok: true,
+      value: { items: [DESKTOP_TERMINAL_BACKEND] },
+    })
+
     const opened = await workspace.terminal.open('desktop-workspace' as SessionId, {
       type: DESKTOP_TERMINAL_BACKEND,
     })
