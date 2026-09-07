@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { useSyncExternalStore, type ReactNode } from 'react'
 import type { TerminalSessionClient } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -103,11 +103,16 @@ type DesktopAppFrameProps = AppFrameProps & {
 
 const DesktopAppFrame = AppFrame as unknown as (props: DesktopAppFrameProps) => ReactNode
 
-function mountDesktopFrame() {
+type DesktopFrameOptions = {
+  terminalDefaultCwd?: () => Promise<string>
+  pickTerminalCwd?: () => Promise<string | undefined>
+}
+
+function mountDesktopFrame(options: DesktopFrameOptions = {}) {
   const store = createLayoutStore().create()
   const { terminal, open } = fakeTerminal()
-  const pickTerminalCwd = vi.fn(async () => '/workspace/picked')
-  const terminalDefaultCwd = vi.fn(async () => '/workspace/default')
+  const pickTerminalCwd = vi.fn(options.pickTerminalCwd ?? (async () => '/workspace/picked'))
+  const terminalDefaultCwd = vi.fn(options.terminalDefaultCwd ?? (async () => '/workspace/default'))
   const renderSlot = vi.fn((key: string) => {
     if (key === 'sidebar') return <div data-testid="rail">rail</div>
     if (key === 'conversation') return <div data-testid="conversation">conversation</div>
@@ -134,6 +139,16 @@ function mountDesktopFrame() {
     />,
   )
   return { ...view, terminal, open, pickTerminalCwd, terminalDefaultCwd }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
 }
 
 beforeEach(() => {
@@ -186,6 +201,101 @@ describe('desktop terminal-first workspace', () => {
         { type: DESKTOP_TERMINAL_BACKEND, cwd: '/workspace/picked' },
         expect.any(AbortSignal),
       )
+    })
+  })
+
+  it('does not let a late default cwd overwrite a folder picked by the operator', async () => {
+    const pendingDefault = deferred<string>()
+    const { container, open, pickTerminalCwd } = mountDesktopFrame({
+      terminalDefaultCwd: () => pendingDefault.promise,
+    })
+
+    fireEvent.click(within(container).getByRole('button', { name: 'Choose terminal folder' }))
+    await waitFor(() => { expect(pickTerminalCwd).toHaveBeenCalledTimes(1) })
+
+    await act(async () => {
+      pendingDefault.resolve('/workspace/default')
+      await pendingDefault.promise
+    })
+    fireEvent.click(within(container).getByRole('button', { name: 'Create terminal' }))
+
+    await waitFor(() => {
+      expect(open).toHaveBeenCalledWith(
+        expect.any(String),
+        { type: DESKTOP_TERMINAL_BACKEND, cwd: '/workspace/picked' },
+        expect.any(AbortSignal),
+      )
+    })
+  })
+
+  it('keeps terminal creation usable when default cwd lookup fails', async () => {
+    const { container, open, terminalDefaultCwd } = mountDesktopFrame({
+      terminalDefaultCwd: async () => { throw new Error('default cwd unavailable') },
+    })
+    await waitFor(() => { expect(terminalDefaultCwd).toHaveBeenCalledTimes(1) })
+
+    fireEvent.click(within(container).getByRole('button', { name: 'Create terminal' }))
+
+    await waitFor(() => {
+      expect(open).toHaveBeenCalledWith(
+        expect.any(String),
+        { type: DESKTOP_TERMINAL_BACKEND },
+        expect.any(AbortSignal),
+      )
+    })
+  })
+
+  it('keeps the current cwd when the native folder picker is cancelled', async () => {
+    const { container, open, pickTerminalCwd, terminalDefaultCwd } = mountDesktopFrame({
+      pickTerminalCwd: async () => undefined,
+    })
+    await waitFor(() => { expect(terminalDefaultCwd).toHaveBeenCalledTimes(1) })
+    await act(async () => { await Promise.resolve() })
+
+    fireEvent.click(within(container).getByRole('button', { name: 'Choose terminal folder' }))
+    await waitFor(() => { expect(pickTerminalCwd).toHaveBeenCalledTimes(1) })
+    fireEvent.click(within(container).getByRole('button', { name: 'Create terminal' }))
+
+    await waitFor(() => {
+      expect(open).toHaveBeenCalledWith(
+        expect.any(String),
+        { type: DESKTOP_TERMINAL_BACKEND, cwd: '/workspace/default' },
+        expect.any(AbortSignal),
+      )
+    })
+  })
+
+  it('keeps the current cwd when the native folder picker rejects', async () => {
+    const { container, open, pickTerminalCwd, terminalDefaultCwd } = mountDesktopFrame({
+      pickTerminalCwd: async () => { throw new Error('picker unavailable') },
+    })
+    await waitFor(() => { expect(terminalDefaultCwd).toHaveBeenCalledTimes(1) })
+    await act(async () => { await Promise.resolve() })
+
+    fireEvent.click(within(container).getByRole('button', { name: 'Choose terminal folder' }))
+    await waitFor(() => { expect(pickTerminalCwd).toHaveBeenCalledTimes(1) })
+    fireEvent.click(within(container).getByRole('button', { name: 'Create terminal' }))
+
+    await waitFor(() => {
+      expect(open).toHaveBeenCalledWith(
+        expect.any(String),
+        { type: DESKTOP_TERMINAL_BACKEND, cwd: '/workspace/default' },
+        expect.any(AbortSignal),
+      )
+    })
+  })
+
+  it('does not apply a default cwd after the desktop frame unmounts', async () => {
+    const pendingDefault = deferred<string>()
+    const { unmount, terminalDefaultCwd } = mountDesktopFrame({
+      terminalDefaultCwd: () => pendingDefault.promise,
+    })
+    await waitFor(() => { expect(terminalDefaultCwd).toHaveBeenCalledTimes(1) })
+
+    unmount()
+    await act(async () => {
+      pendingDefault.resolve('/workspace/late')
+      await pendingDefault.promise
     })
   })
 
