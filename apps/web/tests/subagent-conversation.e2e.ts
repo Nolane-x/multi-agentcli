@@ -372,6 +372,10 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     } finally {
       routeDisposed = true
       releaseCatalog()
+      const openTree = page.getByRole('tree', { name: 'Subagent sessions' })
+      if (await openTree.isVisible().catch(() => false)) {
+        await openTree.press('Escape').catch(() => undefined)
+      }
       await page.unroute(pattern)
     }
   })
