@@ -106,6 +106,7 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
   let browser: Browser
   let page: Page
   let sidecarRoot: string
+  let parentId: SessionId
   let childId: SessionId
   let oneShotId: SessionId
   let grandchildId: SessionId
@@ -140,6 +141,7 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
 
     const parent = scaffold.ctx.agents.roots()[0]
     if (parent === undefined) throw new Error('fresh workspace did not publish its parent Agent')
+    parentId = parent.id
     const parentSettled = scaffold.whenTurnSettled()
     const parentInput = page.locator('[data-composer-input][contenteditable="true"]').first()
     await parentInput.fill(PARENT_PROMPT)
@@ -317,6 +319,13 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     let releaseCatalog = (): void => {}
     const catalogHeld = new Promise<void>((resolve) => { releaseCatalog = resolve })
     await page.route(pattern, async (route) => {
+      const requestBody = route.request().postDataJSON() as {
+        args?: { parentSessionId?: string }
+      }
+      if (requestBody.args?.parentSessionId !== String(parentId)) {
+        await route.fallback()
+        return
+      }
       if (firstClaimed) {
         const response = await route.fetch()
         trailingRequested = true
