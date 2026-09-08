@@ -43,9 +43,10 @@ async function pasteImage(page: Page, bytes: Uint8Array): Promise<void> {
 
 async function hideSendTooltip(page: Page): Promise<void> {
   // The stop control is replaced by the send control in the same toolbar
-  // position. Move outside the viewport so the replacement cannot inherit a
-  // hover trigger during the short reflow.
-  await page.mouse.move(-10, -10)
+  // position. Move to a neutral in-viewport point so Chromium dispatches the
+  // pointer leave deterministically; negative coordinates need not produce a
+  // DOM mouse transition in headless runs.
+  await page.mouse.move(1, 1)
   await page.evaluate(() => {
     const active = document.activeElement
     if (active instanceof HTMLElement) active.blur()
