@@ -46,7 +46,9 @@ function fakeTerminal() {
           resolve()
           return
         }
-        signal.addEventListener('abort', () => resolve(), { once: true })
+        signal.addEventListener('abort', () => {
+          resolve()
+        }, { once: true })
       })
     }),
     write: vi.fn(async (_sessionId: SessionId, _terminalId: string, data: string) => {
