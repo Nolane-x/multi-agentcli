@@ -389,6 +389,11 @@ describe('web e2e: clickable links gallery', () => {
     expect(await page.locator(`a[href="${FETCH_URL}"]`).count()).toBe(1)
     expect(await page.locator(`a[href="${GUIDE_URL}"]`).count()).toBe(2)
 
+    const backToBottom = page.getByRole('button', { name: 'Back to bottom', exact: true })
+    if (await backToBottom.count() > 0) {
+      await backToBottom.click()
+      await expect.poll(() => backToBottom.count(), { timeout: 10_000 }).toBe(0)
+    }
     const snapshot = (await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd))
       .split(SEED_ID).join('{{seededId}}')
       .split(imageUrl).join('{{imageUrl}}')
