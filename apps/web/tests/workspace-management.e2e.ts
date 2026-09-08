@@ -466,7 +466,8 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
   /**
    * Expand Ungrouped and return the exact seeded session row. Other tests in
    * this shared scaffold can legitimately leave additional New Session rows,
-   * so positional tree indexes are not a stable identity.
+   * so positional tree indexes are not a stable identity. SessionTree also
+   * caps ordinary rows until its local overflow affordance is expanded.
    * @returns the seeded session row locator, already present.
    */
   async function seededSessionRow(): Promise<Locator> {
@@ -482,6 +483,10 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
       return await ungroupedRow.getAttribute('aria-expanded')
     }, { timeout: 5_000 }).toBe('true')
     const action = ungroupedSection.locator(`button[aria-label="Session actions for ${SEED_TITLE}"]`)
+    if (await action.count() === 0) {
+      const overflow = ungroupedSection.getByRole('button', { name: /^Show \d+ more sessions$/ })
+      if (await overflow.count() > 0) await overflow.click()
+    }
     await action.waitFor({ state: 'attached', timeout: 10_000 })
     const row = action.locator('xpath=ancestor::*[@role="treeitem"][1]')
     await row.waitFor({ timeout: 10_000 })
