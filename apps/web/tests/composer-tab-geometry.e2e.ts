@@ -1,4 +1,4 @@
-// Browser geometry for the input card across Chat and Trajectory. The browser
+// Web e2e: input card position across view tabs. The browser
 // must expose layout-consuming scrollbars, and an uncompensated control keeps
 // equal rectangles from passing vacuously.
 import { fileURLToPath } from 'node:url'
@@ -49,16 +49,19 @@ async function setMeasuredViewport(
   })
   await page.locator('[data-conversation-scroll]').evaluate(async (host) => {
     const deadline = performance.now() + 5_000
-    let previous = host.getBoundingClientRect().width
+    let previous = host.getBoundingClientRect()
     let stableFrames = 0
     while (performance.now() < deadline) {
       await new Promise<void>((resolve) => { requestAnimationFrame(() => { resolve() }) })
-      const current = host.getBoundingClientRect().width
-      stableFrames = Math.abs(current - previous) < 0.01 ? stableFrames + 1 : 0
+      const current = host.getBoundingClientRect()
+      const settled = Math.abs(current.left - previous.left) < 0.01
+        && Math.abs(current.right - previous.right) < 0.01
+        && Math.abs(current.width - previous.width) < 0.01
+      stableFrames = settled ? stableFrames + 1 : 0
       if (stableFrames >= 3) return
       previous = current
     }
-    throw new Error('conversation width did not settle after the viewport changed')
+    throw new Error('conversation geometry did not settle after the viewport changed')
   })
 }
 
