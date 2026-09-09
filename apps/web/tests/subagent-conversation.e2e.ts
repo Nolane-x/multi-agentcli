@@ -350,6 +350,7 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
       await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
       const catalogButton = currentSubagentButton(page, 3)
       await catalogButton.waitFor({ timeout: 15_000 })
+      await page.mouse.move(0, 0)
       await catalogButton.hover()
       await expect.poll(() => emptyDelivered, { timeout: 15_000 }).toBe(true)
       const tree = page.getByRole('tree', { name: 'Subagent sessions' })
@@ -357,6 +358,7 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
       await catalogButton.waitFor({ timeout: 15_000 })
       acknowledgeReloadConnectionLoss(tripwire, warningStart)
 
+      await page.mouse.move(0, 0)
       await catalogButton.hover()
       await expect.poll(() => trailingRequested, { timeout: 15_000 }).toBe(true)
       await tree.getByRole('treeitem', { name: 'Loading subagents' }).first().waitFor()
