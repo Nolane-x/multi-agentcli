@@ -12,9 +12,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionIdOf } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
-import type { ReactNode } from 'react'
 import type { PanelActions } from './service.ts'
 import { AppFrame } from './AppFrame.tsx'
+import { createDesktopTerminalWorkspace } from './desktop-terminal.ts'
 import { createLayoutStore } from './stores.ts'
 import { LayoutController } from './service.ts'
 import { ThemePresenter } from './theme-presenter.ts'
@@ -70,8 +70,8 @@ interface SessionScopeComponent {
   (props: {
     scope: 'session' | 'session-maybe'
     scopeKey?: string
-    children: ReactNode
-  }): ReactNode
+    children: import('react').ReactNode
+  }): import('react').ReactNode
 }
 
 /** Services required. Session navigation/runtime and the renderer scope share one domain capability. */
@@ -91,14 +91,18 @@ type SpatialSessionsContext = ClientContext & {
 
 /**
  * Client plugin body: provide ctx.layout and register the spatial AppFrame.
+ * The Tauri desktop bridge is detected additively; ordinary browser Harness
+ * builds continue receiving the Session Controller's owner-addressed PTY.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
   const layout = new LayoutController()
+  const desktopTerminal = createDesktopTerminalWorkspace()
   ctx.effect(() => {
     const disposeService = ctx.reflect.provide('layout', layout)
     const services = ctx as SpatialSessionsContext
     const sessions = services.sessions
+    const terminal = desktopTerminal?.terminal ?? sessions.terminal
     const disposeRegistration = ctx.slots.register({
       name: 'root',
       locale: 'common',
@@ -130,7 +134,12 @@ export function apply(ctx: ClientContext): void {
           stopAgentJob: (sessionId: SessionIdOf, jobId: string) => (
             sessions.stopJob(sessionId, jobId)
           ),
-          ...sessions.terminal === undefined ? {} : { terminal: sessions.terminal },
+          ...terminal === undefined ? {} : { terminal },
+          ...desktopTerminal === undefined ? {} : {
+            terminalMode: 'desktop' as const,
+            terminalDefaultCwd: () => desktopTerminal.defaultCwd(),
+            pickTerminalCwd: () => desktopTerminal.pickCwd(),
+          },
         }
       },
     }, AppFrame)

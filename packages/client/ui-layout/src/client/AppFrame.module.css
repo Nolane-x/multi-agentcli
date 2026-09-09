@@ -58,8 +58,11 @@
   bottom: 10px;
   left: 10px;
   z-index: 2;
+  display: grid;
+  gap: 6px;
 }
 
+.terminalFolder,
 .createTerminal {
   width: 100%;
   min-height: 34px;
@@ -70,17 +73,37 @@
   padding: 0 9px;
   border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 16%, transparent);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--dsw-alias-label-primary) 7%, transparent);
   color: var(--dsw-alias-label-primary);
   font: 600 10px/1 var(--ds-font-family-code);
   cursor: pointer;
 }
 
+.terminalFolder {
+  min-height: 30px;
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 3%, transparent);
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 500;
+}
+
+.createTerminal {
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 7%, transparent);
+}
+
+.terminalFolder:hover,
+.terminalFolder:focus-visible,
 .createTerminal:hover,
 .createTerminal:focus-visible {
   border-color: color-mix(in srgb, #68d6a7 48%, transparent);
   background: color-mix(in srgb, #68d6a7 11%, transparent);
+  color: var(--dsw-alias-label-primary);
   outline: none;
+}
+
+.terminalFolder > span:first-child {
+  color: color-mix(in srgb, #68d6a7 74%, var(--dsw-alias-label-secondary));
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 12px;
 }
 
 .createTerminal > span:first-child {
@@ -95,10 +118,12 @@
   opacity: 0.45;
 }
 
+.frame[data-sidebar-collapsed] .terminalFolder > span:last-child,
 .frame[data-sidebar-collapsed] .createTerminal > span:last-child {
   display: none;
 }
 
+.frame[data-sidebar-collapsed] .terminalFolder,
 .frame[data-sidebar-collapsed] .createTerminal {
   padding: 0;
 }
@@ -185,7 +210,7 @@
   box-shadow:
     0 20px 54px color-mix(in srgb, black 13%, transparent),
     0 0 0 1px color-mix(in srgb, var(--dsw-alias-label-primary) 4%, transparent),
-  inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
+    inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
 }
 
 .agentTileTerminal {

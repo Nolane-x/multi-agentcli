@@ -35,8 +35,21 @@ function fakeTerminal() {
         motd: 'ready\r\n',
       },
     })),
-    output: vi.fn(async function* (): AsyncIterable<TerminalOutputFrame> {
+    output: vi.fn(async function* (
+      _sessionId: SessionId,
+      _terminalId: string,
+      signal: AbortSignal,
+    ): AsyncIterable<TerminalOutputFrame> {
       yield { data: '\u001b[32magent$\u001b[0m ' }
+      await new Promise<void>((resolve) => {
+        if (signal.aborted) {
+          resolve()
+          return
+        }
+        signal.addEventListener('abort', () => {
+          resolve()
+        }, { once: true })
+      })
     }),
     write: vi.fn(async (_sessionId: SessionId, _terminalId: string, data: string) => {
       writes.push(data)

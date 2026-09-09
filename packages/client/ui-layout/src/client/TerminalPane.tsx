@@ -1,9 +1,9 @@
 /**
- * A small interactive PTY surface for one exact Harness Session.
+ * A small interactive PTY surface for one terminal address.
  *
- * The pane owns no process state. It only binds the session-addressed terminal
- * capability, projects VT output into the browser-safe screen model, and
- * forwards user input back to the owning Agent.
+ * The pane owns no process state. It binds either the Harness Session-addressed
+ * terminal capability or the desktop-native adapter, projects VT output into
+ * the browser-safe screen model, and forwards exact user input to the PTY.
  */
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -24,6 +24,8 @@ export interface TerminalPaneProps {
   t: TranslateNS<'common'>
   backend?: string
   cwd?: string
+  focused?: boolean
+  onToggleFocus?: () => void
   onClosed?: () => void
 }
 
@@ -59,16 +61,32 @@ function isLifecycleActive(value: { readonly active: boolean }): boolean {
   return value.active
 }
 
-/** Render one live terminal owned by {@link sessionId}. */
+function FocusIcon({ focused }: { focused: boolean }) {
+  const path = focused
+    ? 'M7.2 3.5v3.7H3.5M12.8 3.5v3.7h3.7M7.2 16.5v-3.7H3.5M12.8 16.5v-3.7h3.7'
+    : 'M7.2 3.5H3.5v3.7M12.8 3.5h3.7v3.7M7.2 16.5H3.5v-3.7M12.8 16.5h3.7v-3.7'
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <path d={path} />
+    </svg>
+  )
+}
+
+/** Render one live terminal addressed by {@link sessionId}. */
 export function TerminalPane(props: TerminalPaneProps) {
   const screenRef = useRef<TerminalScreen>(createTerminalScreen(DEFAULT_ROWS, DEFAULT_COLS))
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const terminalIdRef = useRef<string>()
   const closeSentRef = useRef(false)
+  const onClosedRef = useRef(props.onClosed)
   const [snapshot, setSnapshot] = useState<TerminalScreenSnapshot>(() => screenRef.current.snapshot())
   const [terminalId, setTerminalId] = useState<string>()
   const [phase, setPhase] = useState<TerminalPhase>('opening')
   const [error, setError] = useState<string>()
+
+  useEffect(() => {
+    onClosedRef.current = props.onClosed
+  }, [props.onClosed])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -105,6 +123,16 @@ export function TerminalPane(props: TerminalPaneProps) {
         screenRef.current.write(frame.data)
         setSnapshot(screenRef.current.snapshot())
       }
+
+      if (!isLifecycleActive(lifecycle) || controller.signal.aborted || closeSentRef.current) return
+      closeSentRef.current = true
+      const closed = await props.terminal.close(props.sessionId, opened.value.terminalId)
+      if (isRemoteFailure(closed)) throw new Error(errorMessage(closed.error))
+      if (!isLifecycleActive(lifecycle)) return
+      terminalIdRef.current = undefined
+      setTerminalId(undefined)
+      setPhase('closed')
+      onClosedRef.current?.()
     })().catch((cause: unknown) => {
       if (!lifecycle.active || controller.signal.aborted) return
       setError(errorMessage(cause))
@@ -158,14 +186,15 @@ export function TerminalPane(props: TerminalPaneProps) {
         return
       }
       terminalIdRef.current = undefined
+      setTerminalId(undefined)
       setPhase('closed')
-      props.onClosed?.()
+      onClosedRef.current?.()
     }).catch((cause: unknown) => {
       closeSentRef.current = false
       setError(errorMessage(cause))
       setPhase('error')
     })
-  }, [props.onClosed, props.sessionId, props.terminal])
+  }, [props.sessionId, props.terminal])
 
   const stop = useCallback(() => {
     if (terminalId === undefined || phase !== 'running') return
@@ -214,6 +243,7 @@ export function TerminalPane(props: TerminalPaneProps) {
       className={css.pane}
       data-terminal-phase={phase}
       data-terminal-id={terminalId}
+      data-terminal-focused={props.focused || undefined}
       aria-label={props.t('spatial.agent.pane')}
     >
       <header className={css.header}>
@@ -222,6 +252,17 @@ export function TerminalPane(props: TerminalPaneProps) {
           {phase === 'opening' ? props.t('spatial.agent.startingTerminal') : phase === 'closed' ? props.t('spatial.agent.closedTerminal') : props.t('spatial.agent.agentTerminal')}
         </span>
         <div className={css.actions}>
+          {props.onToggleFocus !== undefined && (
+            <button
+              type="button"
+              className={`${css.action} ${css.iconAction}`}
+              aria-label={props.focused ? props.t('spatial.agent.restoreTerminal') : props.t('spatial.agent.focusTerminal')}
+              title={props.focused ? props.t('spatial.agent.restoreTerminal') : props.t('spatial.agent.focusTerminal')}
+              onClick={props.onToggleFocus}
+            >
+              <FocusIcon focused={props.focused === true} />
+            </button>
+          )}
           {terminalId !== undefined && phase === 'running' && (
             <button type="button" className={css.action} aria-label={props.t('spatial.agent.stopTerminal')} onClick={stop}>{props.t('spatial.agent.stop')}</button>
           )}

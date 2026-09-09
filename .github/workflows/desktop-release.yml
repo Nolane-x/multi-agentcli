@@ -2,6 +2,14 @@ name: desktop release
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/desktop-release.yml'
+      - 'apps/desktop/**'
+      - 'packages/client/locale/**'
+      - 'packages/client/ui-layout/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   push:
     tags:
       - 'desktop-v*'
@@ -9,8 +17,30 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: desktop-release-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  lockfile:
+    name: cargo lockfile
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify committed Cargo lockfile
+        run: cargo metadata --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --format-version 1 --no-deps > /dev/null
+
+      - name: Upload committed Cargo lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-cargo-lock
+          path: apps/desktop/src-tauri/Cargo.lock
+          if-no-files-found: error
+
   build:
+    needs: lockfile
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -21,6 +51,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Use committed Cargo lockfile
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-cargo-lock
+          path: apps/desktop/src-tauri
 
       - name: Install Linux WebKit dependencies
         if: runner.os == 'Linux'
@@ -44,6 +80,12 @@ jobs:
       - name: Install JavaScript dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build desktop frontend for native test context
+        run: pnpm -w run build:desktop
+
+      - name: Test native PTY
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib
+
       - name: Build desktop bundles
         run: pnpm --filter @deepseek-ai/dsh-desktop tauri build
 
@@ -53,6 +95,7 @@ jobs:
           name: dsh-spatial-${{ runner.os }}
           path: |
             apps/desktop/src-tauri/target/release/bundle/**
+            apps/desktop/src-tauri/Cargo.lock
             !apps/desktop/src-tauri/target/release/bundle/**/*.sig
           if-no-files-found: error
 

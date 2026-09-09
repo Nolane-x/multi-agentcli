@@ -106,6 +106,7 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
   let browser: Browser
   let page: Page
   let sidecarRoot: string
+  let parentId: SessionId
   let childId: SessionId
   let oneShotId: SessionId
   let grandchildId: SessionId
@@ -140,6 +141,7 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
 
     const parent = scaffold.ctx.agents.roots()[0]
     if (parent === undefined) throw new Error('fresh workspace did not publish its parent Agent')
+    parentId = parent.id
     const parentSettled = scaffold.whenTurnSettled()
     const parentInput = page.locator('[data-composer-input][contenteditable="true"]').first()
     await parentInput.fill(PARENT_PROMPT)
@@ -317,6 +319,13 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     let releaseCatalog = (): void => {}
     const catalogHeld = new Promise<void>((resolve) => { releaseCatalog = resolve })
     await page.route(pattern, async (route) => {
+      const requestBody = route.request().postDataJSON() as {
+        args?: { parentSessionId?: string }
+      }
+      if (requestBody.args?.parentSessionId !== String(parentId)) {
+        await route.fallback()
+        return
+      }
       if (firstClaimed) {
         const response = await route.fetch()
         trailingRequested = true
@@ -339,13 +348,19 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     try {
       await page.reload({ waitUntil: 'load' })
       await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+      const catalogButton = currentSubagentButton(page, 3)
+      await catalogButton.waitFor({ timeout: 15_000 })
+      await page.mouse.move(0, 0)
+      await catalogButton.hover()
       await expect.poll(() => emptyDelivered, { timeout: 15_000 }).toBe(true)
-      await currentSubagentButton(page, 3).waitFor({ timeout: 15_000 })
+      const tree = page.getByRole('tree', { name: 'Subagent sessions' })
+      await tree.press('Escape')
+      await catalogButton.waitFor({ timeout: 15_000 })
       acknowledgeReloadConnectionLoss(tripwire, warningStart)
 
-      await currentSubagentButton(page, 3).hover()
+      await page.mouse.move(0, 0)
+      await catalogButton.hover()
       await expect.poll(() => trailingRequested, { timeout: 15_000 }).toBe(true)
-      const tree = page.getByRole('tree', { name: 'Subagent sessions' })
       await tree.getByRole('treeitem', { name: 'Loading subagents' }).first().waitFor()
       expect(await tree.getByRole('treeitem', { name: 'Loading subagents' }).count()).toBe(2)
       await compareOrRefreshGolden(
@@ -359,6 +374,10 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     } finally {
       routeDisposed = true
       releaseCatalog()
+      const openTree = page.getByRole('tree', { name: 'Subagent sessions' })
+      if (await openTree.isVisible().catch(() => false)) {
+        await openTree.press('Escape').catch(() => undefined)
+      }
       await page.unroute(pattern)
     }
   })
